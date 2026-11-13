@@ -119,6 +119,8 @@ import {
 } from "./session-supervisor-utils.js";
 import { forcePersistPiSession } from "./compat/pi-session-persistence.js";
 import { createTurnCaptureExtension } from "./turn-capture.js";
+import type { RunHealthFailure } from "./run-health-monitor.js";
+import { SessionRunHealth } from "./session-run-health.js";
 import { createTranscriptIdentityExtension } from "./transcript-identity.js";
 import { createPlanLimitsExtension, readSessionUsage } from "./session-usage.js";
 import {
@@ -186,6 +188,10 @@ export interface PiSdkDriverOptions {
   readonly desktopExtensions?: PiDesktopExtensionObserver;
   readonly onTurnCaptureBoundary?: import("@pi-gui/session-driver").TurnCaptureObserver;
   readonly turnCaptureTimeoutMs?: number;
+  /** Meaningful-activity deadline. Defaults to 45 minutes; 0 disables inactivity checks. */
+  readonly runInactivityTimeoutMs?: number;
+  /** How long to wait before reporting that automatic cancellation is unconfirmed. */
+  readonly runStopTimeoutMs?: number;
   readonly generateThreadTitleOverride?: (
     workspace: WorkspaceRef,
     options: import("./thread-title-generator.js").GenerateThreadTitleOptions,
@@ -222,6 +228,7 @@ interface ManagedSessionRecord {
    */
   abortOnRunStart: boolean;
   pendingRunOutcome: RunOutcome | undefined;
+  runHealth?: SessionRunHealth;
   /**
    * The newest reply entry when pi settled a run it reports aborted; cleared when the next
    * run starts. Saved in the session catalog so it survives a restart.
@@ -336,6 +343,8 @@ export class SessionSupervisor {
   private readonly extensionFlagValuesForSession: PiSdkDriverOptions["extensionFlagValuesForSession"];
   private readonly onTurnCaptureBoundary: PiSdkDriverOptions["onTurnCaptureBoundary"];
   private readonly turnCaptureTimeoutMs: number | undefined;
+  private readonly runInactivityTimeoutMs: number;
+  private readonly runStopTimeoutMs: number;
   private readonly records = new Map<string, ManagedSessionRecord>();
   /** Latest plan limits a provider reported, shared by every session on that provider. */
   private readonly planLimitsByProvider = new Map<string, SessionPlanLimits>();
@@ -364,6 +373,12 @@ export class SessionSupervisor {
     this.extensionFlagValuesForSession = options.extensionFlagValuesForSession;
     this.onTurnCaptureBoundary = options.onTurnCaptureBoundary;
     this.turnCaptureTimeoutMs = options.turnCaptureTimeoutMs;
+    this.runInactivityTimeoutMs = options.runInactivityTimeoutMs ?? 45 * 60_000;
+    this.runStopTimeoutMs = options.runStopTimeoutMs ?? 15_000;
+    if (!Number.isFinite(this.runInactivityTimeoutMs) || this.runInactivityTimeoutMs < 0 ||
+        !Number.isFinite(this.runStopTimeoutMs) || this.runStopTimeoutMs <= 0) {
+      throw new RangeError("Run health timeouts must be finite and non-negative (stop timeout must be positive).");
+    }
     this.agentDir = options.agentDir;
   }
 
@@ -442,10 +457,12 @@ export class SessionSupervisor {
                       this.records.get(
                         sessionKey({ workspaceId: workspace.workspaceId, sessionId }),
                       )?.cancellationRequested ?? false,
-                    isInterrupted: (sessionId) =>
-                      this.records.get(
+                    isInterrupted: (sessionId) => {
+                      const record = this.records.get(
                         sessionKey({ workspaceId: workspace.workspaceId, sessionId }),
-                      )?.closed ?? true,
+                      );
+                      return !record || record.closed || record.runHealth?.failure !== undefined;
+                    },
                   }),
                 },
               ]
@@ -509,6 +526,7 @@ export class SessionSupervisor {
           if (discoveredKeys.has(key)) {
             return undefined;
           }
+          if (this.records.get(key)?.runHealth?.isStopping) return session;
 
           const sessionFilePath =
             session.sessionFilePath ?? (await this.catalogs.getSessionFile(session.sessionRef));
@@ -567,6 +585,7 @@ export class SessionSupervisor {
         continue;
       }
 
+      if (record.runHealth?.isStopping) continue;
       record.unsubscribeAgent?.();
       record.unsubscribeAgent = undefined;
       record.listeners.clear();
@@ -626,6 +645,9 @@ export class SessionSupervisor {
   async removeWorkspace(workspaceId: WorkspaceId): Promise<void> {
     await this.runWorkspaceMutation(workspaceId, async () => {
       const sessions = (await this.catalogs.sessions.listSessions(workspaceId)).sessions;
+      for (const record of this.records.values()) {
+        if (record.workspace.workspaceId === workspaceId) record.runHealth?.assertReusable();
+      }
       await this.catalogs.workspaces.deleteWorkspace(workspaceId);
 
       for (const session of sessions) {
@@ -1172,7 +1194,9 @@ export class SessionSupervisor {
   ): Promise<void> {
     const isQueuedMessage = session.isStreaming && !isExtensionCommand && Boolean(input.deliverAs);
     const runId = isQueuedMessage || isExtensionCommand ? undefined : crypto.randomUUID();
+    if (record.runHealth?.isStopping) throw new Error("The previous run has not confirmed cancellation.");
     if (!isQueuedMessage && !isExtensionCommand) {
+      record.runHealth?.beforePrompt(session);
       record.cancellationRequested = false;
       record.abortOnRunStart = false;
       // Stop can arrive from here on, before Pi has a run to abort.
@@ -1194,6 +1218,8 @@ export class SessionSupervisor {
       await this.emit(record, sessionUpdatedEvent(record));
     } catch (error) {
       record.promptStarting = false;
+      record.runHealth?.stopMonitoring();
+      record.runHealth?.settlementHandled();
       throw error;
     }
 
@@ -1204,6 +1230,7 @@ export class SessionSupervisor {
     }
 
     try {
+      record.runHealth?.assertReusable();
       const images = input.attachments?.flatMap(
         (attachment: NonNullable<SessionMessageInput["attachments"]>[number]) =>
           attachment.kind === "image"
@@ -1232,6 +1259,7 @@ export class SessionSupervisor {
         const entry = queuedMessageFromInput(input, record.updatedAt);
         let queued = false;
         await this.queueStep(record, async (current) => {
+          record.runHealth?.assertReusable();
           if (!current.isStreaming) throw finished();
           record.queuedMessages = [...record.queuedMessages, entry];
           try {
@@ -1268,6 +1296,7 @@ export class SessionSupervisor {
           });
         } finally {
           record.promptStarting = false;
+          record.runHealth?.promptFinished();
           if (record.abortOnRunStart) {
             // Pi never started a run for this prompt, so nothing is left to stop.
             record.abortOnRunStart = false;
@@ -1285,7 +1314,15 @@ export class SessionSupervisor {
       // A card button's command failing says nothing about the thread, which may be mid-run:
       // leave its state alone and let the app report the failure.
       if (input.extensionCommandOnly) throw error;
+      if (!isQueuedMessage && record.runHealth?.failure) {
+        record.promptStarting = false;
+        record.runHealth?.stopMonitoring();
+        record.runHealth?.settlementHandled();
+        // The health transition already reported this run's terminal failure.
+        return;
+      }
       if (!isQueuedMessage) {
+        record.runHealth?.stopMonitoring();
         record.runningRunId = undefined;
       }
       if (!isQueuedMessage && !isExtensionCommand) {
@@ -1341,9 +1378,13 @@ export class SessionSupervisor {
     sessionRef: SessionRef,
     messages: readonly SessionQueuedMessage[],
   ): Promise<void> {
+    const previous = this.records.get(sessionKey(sessionRef));
+    const epoch = previous?.runHealth?.epoch ?? 0;
     const record = await this.ensureRecord(sessionRef);
     this.requireSession(record);
     await this.changeQueue(record, (session) => {
+      record.runHealth?.assertReusable();
+      if ((record.runHealth?.epoch ?? 0) !== epoch) throw new Error("Queued edit belongs to an interrupted run.");
       // The app's list can still hold messages pi has delivered; they must not go back to pi.
       forgetDeliveredQueuedMessages(record, session);
       record.queuedMessages = messages
@@ -1393,12 +1434,14 @@ export class SessionSupervisor {
     step: (session: AgentSession) => Promise<void>,
   ): Promise<void> {
     record.queueStepsPending += 1;
+    const epoch = record.runHealth?.epoch;
     const run = record.piQueueSync
       .catch(() => undefined)
       .then(async () => {
         const session = record.session;
-        if (!session || record.closed) return;
+        if (!session || record.closed || record.runHealth?.epoch !== epoch) return;
         await step(session);
+        if (record.runHealth?.epoch !== epoch) session.clearQueue();
       })
       .finally(() => {
         record.queueStepsPending -= 1;
@@ -1517,6 +1560,7 @@ export class SessionSupervisor {
       return;
     }
 
+    if (record.runHealth?.isStopping) return;
     record.cancellationRequested = true;
     if (record.runAwaitingSettle) record.stopBeforeSettle = true;
     if (record.promptStarting && !record.session.isStreaming) {
@@ -1674,11 +1718,13 @@ export class SessionSupervisor {
    * cleared before anything awaits, so a deferred reload asked for twice runs once.
    */
   private runReload(record: ManagedSessionRecord): Promise<void> {
+    record.runHealth?.assertReusable();
     record.reloadPending = false;
     const previous = record.reloadInFlight ?? Promise.resolve();
     const reload = previous
       .catch(() => undefined)
       .then(async () => {
+        record.runHealth?.assertReusable();
         this.resetExtensionUi(record);
         await this.requireSession(record).reload();
         await this.syncRecordAfterSessionMutation(record, { emitUpdate: true });
@@ -1753,6 +1799,10 @@ export class SessionSupervisor {
       return;
     }
 
+    if (record.runHealth?.isStopping) {
+      throw new Error("The previous run has not confirmed cancellation. Restart the app before reopening this session.");
+    }
+    record.runHealth?.stopMonitoring();
     record.closed = true;
     record.runningRunId = undefined;
     record.status = "idle";
@@ -1784,6 +1834,9 @@ export class SessionSupervisor {
   private async ensureRecord(sessionRef: SessionRef): Promise<ManagedSessionRecord> {
     const key = sessionKey(sessionRef);
     const existing = this.records.get(key);
+    if (existing?.runHealth?.isStopping) {
+      throw new Error("The previous run is still stopping. Wait for cancellation to finish, or restart the app.");
+    }
     if (existing && existing.session && !existing.closed) {
       return existing;
     }
@@ -1924,6 +1977,7 @@ export class SessionSupervisor {
       reloadInFlight: undefined,
       extensionCommandsRunning: 0,
     };
+    record.runHealth = this.createRunHealth(record);
     return record;
   }
 
@@ -1936,6 +1990,7 @@ export class SessionSupervisor {
   }
 
   private requireSession(record: ManagedSessionRecord): AgentSession {
+    record.runHealth?.assertReusable();
     if (!record.session) {
       throw new Error(`Session ${sessionKey(record.ref)} is not active.`);
     }
@@ -1943,6 +1998,7 @@ export class SessionSupervisor {
   }
 
   private requireRuntime(record: ManagedSessionRecord): AgentSessionRuntime {
+    record.runHealth?.assertReusable();
     if (!record.runtime) {
       throw new Error(`Session ${sessionKey(record.ref)} runtime is not active.`);
     }
@@ -1950,6 +2006,10 @@ export class SessionSupervisor {
   }
 
   private async disposeRecordRuntime(record: ManagedSessionRecord): Promise<void> {
+    if (record.runHealth?.isStopping) {
+      throw new Error("Cannot dispose a runtime while automatic cancellation is unconfirmed.");
+    }
+    record.runHealth?.stopMonitoring();
     const runtime = record.runtime;
     const session = record.session;
     record.runtime = undefined;
@@ -2097,6 +2157,7 @@ export class SessionSupervisor {
     record: ManagedSessionRecord,
     session: AgentSession,
   ): Promise<void> {
+    record.runHealth?.assertReusable();
     const previousKey = sessionKey(record.ref);
     const nextRef = {
       workspaceId: record.workspace.workspaceId,
@@ -2124,6 +2185,7 @@ export class SessionSupervisor {
       this.records.set(nextKey, record);
     }
 
+    record.runHealth?.stopMonitoring();
     record.session = session;
     // The old session's agent_settled will not reach this record any more.
     record.runAwaitingSettle = session.isStreaming;
@@ -2131,7 +2193,7 @@ export class SessionSupervisor {
     record.sessionFile = session.sessionFile ?? session.sessionManager.getSessionFile();
     record.unsubscribeAgent?.();
     record.unsubscribeAgent = session.subscribe((event) => {
-      this.handleAgentEvent(record, event);
+      if (record.session === session && !record.closed) this.handleAgentEvent(record, event);
     });
     record.bindingExtensions = true;
     try {
@@ -2216,24 +2278,33 @@ export class SessionSupervisor {
   private createCommandContextActions(
     record: ManagedSessionRecord,
   ): ExtensionCommandContextActions {
+    const capturedSession = record.session;
+    const check = () => {
+      record.runHealth?.assertReusable();
+      if (record.session !== capturedSession || record.closed) throw new Error("Extension belongs to an inactive session.");
+    };
     return {
       waitForIdle: () => this.requireSession(record).waitForIdle(),
       newSession: async (options) => {
+        check();
         const { cancelled } = await this.requireRuntime(record).newSession(options);
         await this.syncRecordAfterSessionMutation(record, { emitUpdate: true });
         return { cancelled };
       },
       fork: async (entryId, options) => {
+        check();
         const result = await this.requireRuntime(record).fork(entryId, options);
         await this.syncRecordAfterSessionMutation(record, { emitUpdate: true });
         return { cancelled: result.cancelled };
       },
       navigateTree: async (targetId, options) => {
+        check();
         const result = await this.requireSession(record).navigateTree(targetId, options);
         await this.syncRecordAfterSessionMutation(record, { emitUpdate: true });
         return { cancelled: result.cancelled };
       },
       switchSession: async (sessionPath, options) => {
+        check();
         // switchSession adopts an arbitrary existing JSONL. Claim it before the
         // runtime opens it, mirroring the reopen path, so this seam can't fork
         // a session another process holds. The rebind then moves our lease.
@@ -2245,6 +2316,7 @@ export class SessionSupervisor {
         };
         let cancelled: boolean;
         try {
+          check();
           ({ cancelled } = await this.requireRuntime(record).switchSession(sessionPath, options));
         } catch (error) {
           await releaseUnusedClaim();
@@ -2256,7 +2328,7 @@ export class SessionSupervisor {
         await this.syncRecordAfterSessionMutation(record, { emitUpdate: true });
         return { cancelled };
       },
-      reload: () => this.runReload(record),
+      reload: () => { check(); return this.runReload(record); },
     };
   }
 
@@ -2286,6 +2358,7 @@ export class SessionSupervisor {
           }
           opts?.signal?.removeEventListener("abort", onAbort);
           record.pendingHostUiRequests.delete(requestId);
+          record.runHealth?.progress();
         };
 
         const onAbort = () => {
@@ -2306,6 +2379,7 @@ export class SessionSupervisor {
           }, timeoutMs);
         }
 
+        record.runHealth?.progress();
         record.pendingHostUiRequests.set(requestId, {
           resolve: (response) => {
             cleanup();
@@ -2751,13 +2825,16 @@ export class SessionSupervisor {
       return;
     }
 
+    const healthEpoch = record.runHealth?.epoch;
     record.eventQueue = chainRecoveringEventQueue(
       record.eventQueue,
       async () => {
+        if (record.runHealth?.epoch !== healthEpoch) return;
         if (options?.persistSnapshot !== false) {
           await this.persistSnapshot(record);
         }
         for (const event of events) {
+          if (record.runHealth?.epoch !== healthEpoch) return;
           await this.emit(record, event);
         }
       },
@@ -2798,7 +2875,71 @@ export class SessionSupervisor {
     this.stopMarkWrites.set(key, write);
   }
 
+  private createRunHealth(record: ManagedSessionRecord): SessionRunHealth {
+    return new SessionRunHealth({
+      inactivityMs: this.runInactivityTimeoutMs,
+      stopTimeoutMs: this.runStopTimeoutMs,
+      getState: () => ({
+        session: record.session,
+        closed: record.closed,
+        promptStarting: record.promptStarting,
+        awaitingSettle: record.runAwaitingSettle,
+        waitingForInput: record.pendingHostUiRequests.size > 0,
+      }),
+      onInterrupt: (failure) => this.interruptUnhealthyRun(record, failure),
+      onCancellationUnconfirmed: () => {
+        // In-process SDK work cannot be killed safely: keep its lease and refuse reuse.
+        console.warn(`[pi-sdk-driver] cancellation unconfirmed for ${sessionKey(record.ref)}; runtime retained`);
+        this.queueDriverEvents(record, [{
+          type: "hostUiRequest", sessionRef: { ...record.ref }, timestamp: nowIso(),
+          request: { kind: "notify", requestId: crypto.randomUUID(), message: "Automatic cancellation has not finished. This session is locked to prevent overlapping work. Restart the app if it remains stuck.", level: "warning" },
+        }], { persistSnapshot: false });
+      },
+      onStopConfirmed: () => {
+        record.runningRunId = undefined;
+        record.status = "failed";
+        this.runPendingReload(record);
+      },
+      onAbortDeferred: () => { record.abortOnRunStart = true; },
+      onAbortError: (error) => {
+        console.warn("[pi-sdk-driver] automatic cancellation failed; runtime retained", error);
+      },
+    });
+  }
+
+  private interruptUnhealthyRun(record: ManagedSessionRecord, failure: RunHealthFailure): void {
+    const runId = record.runningRunId;
+    record.status = "failed";
+    record.preview = failure.message;
+    record.updatedAt = nowIso();
+
+    record.queuedMessages = [];
+    record.queuedStartFailed = true;
+    // Drain already accepted queue edits before clearing their SDK mirror, too.
+    void this.changeQueue(record, () => {
+      record.queuedMessages = [];
+    }).catch((error: unknown) => {
+      console.warn("[pi-sdk-driver] clearing interrupted run queue failed", error);
+    });
+    // Do not await a listener/persistence queue before issuing cancellation.
+    const failureEvent: SessionDriverEvent = {
+      type: "runFailed", sessionRef: { ...record.ref }, timestamp: nowIso(), error: failure,
+      ...(runId ? { runId } : {}),
+    };
+    for (const listener of [...record.listeners]) {
+      void Promise.resolve().then(() => listener(failureEvent)).catch((error) => {
+        console.warn("[pi-sdk-driver] health failure listener failed", error);
+      });
+    }
+    void this.persistSnapshot(record).catch((error) => {
+      console.warn("[pi-sdk-driver] saving run health failure failed", error);
+    });
+
+  }
+
+
   private handleAgentEvent(record: ManagedSessionRecord, event: AgentSessionEvent): void {
+    record.runHealth?.observe(event);
     const mapped = this.mapAgentEvent(record, event);
     if (mapped.length === 0) {
       if (event.type === "agent_settled" || event.type === "compaction_end") {
@@ -2820,6 +2961,9 @@ export class SessionSupervisor {
     event: AgentSessionEvent,
   ): SessionDriverEvent[] {
     const timestamp = nowIso();
+    // Cancellation can drain late tool/text frames. Do not resurrect the failed UI run.
+    if (record.runHealth?.failure && record.runHealth?.isStopping &&
+        event.type !== "agent_start" && event.type !== "agent_end" && event.type !== "agent_settled") return [];
     // Calls a tool makes through ctx.executeTool() carry parentToolCallId. Pi saves them only on
     // the parent's result, so the timeline shows the parent call alone, live and after reload.
     if ("parentToolCallId" in event && event.parentToolCallId) {
@@ -2838,7 +2982,7 @@ export class SessionSupervisor {
         record.pendingRunOutcome = undefined;
         this.markStoppedReply(record, undefined);
         record.runAwaitingSettle = true;
-        record.status = "running";
+        record.status = record.runHealth?.failure ? "failed" : "running";
         return [sessionUpdatedEvent(record)];
       case "turn_start":
         record.status = "running";
@@ -2981,15 +3125,19 @@ export class SessionSupervisor {
         return [sessionUpdatedEvent(record)];
       }
       case "agent_settled": {
-        const outcome = record.cancellationRequested
-          ? { status: "cancelled" as const }
-          : record.pendingRunOutcome;
+        const healthFailure = record.runHealth?.failure;
+        const outcome = healthFailure
+          ? { status: "failed" as const, error: healthFailure }
+          : record.cancellationRequested
+            ? { status: "cancelled" as const }
+            : record.pendingRunOutcome;
         record.pendingRunOutcome = undefined;
         // pi captures `aborted` before awaiting extension agent_settled handlers, so a Stop
         // the driver accepted during them counts too, even if another prompt came since.
         const stopped = event.aborted || record.stopBeforeSettle;
         record.cancellationRequested = false;
         record.runAwaitingSettle = false;
+        record.runHealth?.settlementHandled();
         record.stopBeforeSettle = false;
         this.markStoppedReply(
           record,
@@ -3012,7 +3160,7 @@ export class SessionSupervisor {
 
         // User cancellation is neither successful completion nor a runtime
         // failure. Publish idle without triggering completion/failure consumers.
-        if (!outcome || outcome.status === "cancelled") return [sessionUpdatedEvent(record)];
+        if (healthFailure || !outcome || outcome.status === "cancelled") return [sessionUpdatedEvent(record)];
 
         return toDriverEvents(
           outcome.status === "completed"
@@ -4004,6 +4152,7 @@ function isRecordBusyForDelete(record: ManagedSessionRecord): boolean {
 /** A turn (or the steps before it), a compaction or an extension command is running. */
 function isRecordBusy(record: ManagedSessionRecord): boolean {
   return (
+    Boolean(record.runHealth?.isStopping) ||
     record.runningRunId !== undefined ||
     record.promptStarting ||
     record.session?.isStreaming === true ||
