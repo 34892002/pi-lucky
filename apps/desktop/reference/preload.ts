@@ -14,6 +14,7 @@ import {
   drawWindowControlsArgument,
   type PiDesktopApi,
   type CustomProviderConfig,
+  type CustomProviderModelTestResult,
   type CustomProviderProbeInput,
   type CustomProviderProbeResult,
   type McpServerScope,
@@ -385,6 +386,11 @@ contextBridge.exposeInMainWorld("piApp", {
       desktopIpc.probeCustomProviderModels,
       input,
     ) as Promise<CustomProviderProbeResult>,
+  testCustomProviderModel: (config: CustomProviderConfig) =>
+    ipcRenderer.invoke(
+      desktopIpc.testCustomProviderModel,
+      config,
+    ) as Promise<CustomProviderModelTestResult>,
   setEnableSkillCommands: (workspaceId: string, enabled: boolean) =>
     ipcRenderer.invoke(
       desktopIpc.setEnableSkillCommands,

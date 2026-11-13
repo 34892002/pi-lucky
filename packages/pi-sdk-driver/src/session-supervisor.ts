@@ -1053,6 +1053,75 @@ export class SessionSupervisor {
     await this.updateArchivedState(sessionRef, undefined);
   }
 
+  /**
+   * Permanently deletes a thread: its catalog entry and the JSONL transcript on disk.
+   * Refuses while the thread is running or has queued work, and while a live foreign
+   * process holds the session's lease, so only a session nobody is writing is removed.
+   */
+  async deleteSession(sessionRef: SessionRef): Promise<void> {
+    await this.runWorkspaceMutation(sessionRef.workspaceId, async () => {
+      const key = sessionKey(sessionRef);
+      const record = this.records.get(key);
+      const entry = await this.catalogs.sessions.getSession(sessionRef);
+      const sessionFile =
+        record?.sessionFile ??
+        entry?.sessionFilePath ??
+        (await this.catalogs.getSessionFile(sessionRef)) ??
+        (await this.findSessionFileOnDisk(sessionRef));
+
+      if (!record && !entry && !sessionFile) {
+        throw new Error(`Unknown session ${key}.`);
+      }
+      if (record && isRecordBusyForDelete(record)) {
+        throw new Error(
+          "The thread is running, waiting, or has queued messages; it was not deleted.",
+        );
+      }
+
+      // Claimed before anything is mutated: a live foreign writer refuses the delete and
+      // leaves the record usable, and our own claim keeps the file until the unlink.
+      const leasePath = sessionFile ? await this.claimSessionLease(sessionFile) : undefined;
+      try {
+        if (record) {
+          // Closed first so queued snapshot writes cannot recreate the entry deleted below.
+          // The lease is detached so disposing the runtime cannot release the claim.
+          if (leasePath) record.leasePath = undefined;
+          record.closed = true;
+          record.runningRunId = undefined;
+          record.status = "idle";
+          this.clearExtensionUiState(record);
+          this.cancelPendingHostUiRequests(record);
+          await record.eventQueue.catch(() => undefined);
+          record.unsubscribeAgent?.();
+          record.unsubscribeAgent = undefined;
+          await this.disposeRecordRuntimeSafely(record);
+        }
+
+        await this.catalogs.sessions.deleteSession(sessionRef);
+        if (sessionFile) {
+          try {
+            await unlink(sessionFile);
+          } catch (error) {
+            if (!isMissingFileError(error)) throw error;
+          }
+        }
+      } finally {
+        if (leasePath) await this.releaseLeasePath(leasePath);
+      }
+
+      if (record) {
+        await this.emit(record, {
+          type: "sessionClosed",
+          sessionRef: record.ref,
+          timestamp: nowIso(),
+          reason: "manual",
+        });
+        record.listeners.clear();
+        this.records.delete(key);
+      }
+    });
+  }
+
   async sendUserMessage(sessionRef: SessionRef, input: SessionMessageInput): Promise<void> {
     const record = await this.ensureRecord(sessionRef);
     // Counted until the send marks the session busy, so an idle-only archive cannot
@@ -3915,6 +3984,21 @@ function toDriverEvents(
   const id = runId ?? record.runningRunId;
   const event = id ? { ...base, runId: id } : base;
   return [event, sessionUpdatedEvent(record)];
+}
+
+/** The thread still has work in flight or queued, so deleting it would drop that work. */
+function isRecordBusyForDelete(record: ManagedSessionRecord): boolean {
+  return (
+    isRecordBusy(record) ||
+    record.runAwaitingSettle ||
+    record.status !== "idle" ||
+    record.queuedMessages.length > 0 ||
+    record.queuedStartScheduled ||
+    record.sendsSettling > 0 ||
+    record.queueStepsPending > 0 ||
+    record.startingQueuedMessage !== undefined ||
+    record.pendingHostUiRequests.size > 0
+  );
 }
 
 /** A turn (or the steps before it), a compaction or an extension command is running. */

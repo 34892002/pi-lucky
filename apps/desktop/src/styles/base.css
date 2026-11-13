@@ -183,6 +183,17 @@ svg {
   color: var(--button-primary-disabled-ink);
 }
 
+.button--danger {
+  background: var(--danger-tint-bg);
+  border-color: var(--danger-tint-border);
+  color: var(--error-ink);
+}
+
+.button--danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--error) 18%, transparent);
+  border-color: color-mix(in srgb, var(--error) 32%, transparent);
+}
+
 .button--cta-icon {
   width: 64px;
   min-width: 64px;

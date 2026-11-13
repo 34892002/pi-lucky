@@ -40,6 +40,7 @@ type WorkspaceDriver = Pick<
   | "archiveSession"
   | "archiveSessionIfIdle"
   | "createSession"
+  | "deleteSession"
   | "forkSession"
   | "generateThreadTitle"
   | "removeWorkspace"
@@ -120,6 +121,8 @@ export interface WorkspaceOwner {
     expect: { readonly lastRunOutcome: SessionRunOutcome },
   ): Promise<DesktopAppState>;
   unarchiveSession(target: WorkspaceSessionTarget): Promise<DesktopAppState>;
+  /** Permanently deletes a thread and its transcript file on disk. */
+  deleteSession(target: WorkspaceSessionTarget): Promise<DesktopAppState>;
   createSession(input: CreateSessionInput): Promise<DesktopAppState>;
   syncCurrentWorkspace(): Promise<DesktopAppState>;
   createWorktree(input: CreateWorktreeInput): Promise<DesktopAppState>;
@@ -143,6 +146,7 @@ export function createWorkspaceOwner(store: WorkspaceOwnerHost): WorkspaceOwner 
     archiveSession: (target) => archiveSession(store, target),
     archiveIdleSession: (sessionRef, expect) => archiveIdleSession(store, sessionRef, expect),
     unarchiveSession: (target) => unarchiveSession(store, target),
+    deleteSession: (target) => deleteSession(store, target),
     createSession: (input) => createSession(store, input),
     syncCurrentWorkspace: () => syncCurrentWorkspace(store),
     createWorktree: (input) => worktree.createWorktree(store, input),
@@ -324,7 +328,7 @@ async function archiveSession(
     store.clearPendingAutoTitle(sessionRef);
     store.unpinSession(sessionRef);
     await store.driver.archiveSession(sessionRef);
-    return store.refreshState(selectionAfterArchiving(store.workspaceState(), target));
+    return store.refreshState(selectionAfterRemovingSession(store.workspaceState(), target));
   });
 }
 
@@ -342,7 +346,7 @@ async function archiveIdleSession(
   return store.refreshState();
 }
 
-function selectionAfterArchiving(
+function selectionAfterRemovingSession(
   state: WorkspaceStateView,
   target: WorkspaceSessionTarget,
 ): RefreshStateOptions {
@@ -420,6 +424,30 @@ async function unarchiveSession(
       clearLastError: true,
       activeView: "threads",
     });
+  });
+}
+
+/**
+ * Deletes a thread for good. The driver refuses while the thread is active, so a
+ * lost draft in flight is the only state that can still be dropped here.
+ */
+async function deleteSession(
+  store: WorkspaceOwnerHost,
+  target: WorkspaceSessionTarget,
+): Promise<DesktopAppState> {
+  await store.initialize();
+
+  return store.withErrorHandling(async () => {
+    const sessionRef = toSessionRef(target);
+    if (!store.sessionFromState(sessionRef)) {
+      return store.withError(`Unknown session: ${target.workspaceId}:${target.sessionId}`);
+    }
+    await store.driver.deleteSession(sessionRef);
+    // Only touch the user-visible metadata once the driver actually removed the thread;
+    // a refused delete (still running, leased elsewhere) must leave pins and titles alone.
+    store.clearPendingAutoTitle(sessionRef);
+    store.unpinSession(sessionRef);
+    return store.refreshState(selectionAfterRemovingSession(store.workspaceState(), target));
   });
 }
 

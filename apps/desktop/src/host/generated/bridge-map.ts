@@ -132,6 +132,7 @@ export const BRIDGE_METHODS = {
   steerQueuedComposerMessage: ["steerQueuedComposerMessage", "invoke"],
   submitComposer: ["submitComposer", "invoke"],
   syncCurrentWorkspace: ["syncCurrentWorkspace", "invoke"],
+  testCustomProviderModel: ["testCustomProviderModel", "invoke"],
   toggleWindowMaximize: ["toggleWindowMaximize", "invoke"],
   unarchiveSession: ["unarchiveSession", "invoke"],
   updateComposerDraft: ["updateComposerDraft", "invoke"],

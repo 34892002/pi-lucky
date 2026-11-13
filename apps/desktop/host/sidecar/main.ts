@@ -25,6 +25,8 @@ import {
 import { DesktopExtensionViewOwner } from "../extensions/extension-view-owner";
 import { performExtensionViewHostAction } from "../extensions/extension-view-actions";
 import { registerDesktopIpc } from "../ipc/register-desktop-ipc";
+import { testCustomProviderModel } from "./custom-provider-model-test";
+import { probeCustomProviderModels } from "./custom-provider-model-probe";
 import { getChangedFiles, getFileDiff, stageFile } from "../platform/files/app-store-diff";
 import { listWorkspaceFiles, readWorkspaceFile } from "../platform/files/app-store-files";
 import { resolveExistingWorkspacePath } from "../platform/files/workspace-paths";
@@ -176,6 +178,7 @@ async function main(): Promise<void> {
     userDataDir,
     initialWorkspacePaths: initialWorkspacePaths(),
     getWindow: () => window,
+    purgeTurnCheckpoints: (sessionRef) => checkpoints.removeSession(sessionRef),
     shouldKeepSessionDialogs: (sessionRef) =>
       windows?.isSessionVisibleInAnotherWindow(sessionRef) ?? false,
     driverOptions: {
@@ -348,7 +351,8 @@ async function main(): Promise<void> {
           return trimmed;
         },
       }),
-      probeCustomProviderModels: async () => ({ ok: true, models: [] }),
+      probeCustomProviderModels,
+      testCustomProviderModel,
       notificationPermission: () => notificationPermissionService,
       terminal: getTerminalService,
       optionalTerminal: () => terminalService,

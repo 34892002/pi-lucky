@@ -203,6 +203,9 @@ export function createPiAppBridge(config: BridgeConfig): PiAppBridge {
       };
     },
     getThemeMode: () => globalThis.localStorage.getItem("pi-theme-mode") ?? "system",
+    // `deleteSession` is not in pi-gui's preload, so the generated bridge map cannot
+    // provide it; forward it like the other server-backed methods above.
+    deleteSession: (target: unknown) => invokeServer(channelFor("deleteSession"), [target]),
     addComposerAttachments: (attachments: readonly ComposerAttachment[]) =>
       invokeServer(channelFor("addComposerAttachments"), [attachments]),
     pickComposerAttachments: () => invokeServer(channelFor("pickComposerAttachments"), []),

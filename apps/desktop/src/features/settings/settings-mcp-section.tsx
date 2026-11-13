@@ -1,5 +1,6 @@
 import { useTranslation, type Translate } from "../../i18n";
 import { useCallback, useEffect, useState } from "react";
+import { ConfirmDialog } from "../../ui/confirm-dialog";
 import type {
   McpServerRecord,
   McpServerScope,
@@ -38,6 +39,7 @@ export function SettingsMcpSection({ workspaceId, actions }: SettingsMcpSectionP
   const [error, setError] = useState<string | undefined>();
   const [pending, setPending] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const [pendingRemoval, setPendingRemoval] = useState<McpServerRecord | null>(null);
 
   useEffect(() => setError(undefined), [workspaceId]);
 
@@ -116,11 +118,7 @@ export function SettingsMcpSection({ workspaceId, actions }: SettingsMcpSectionP
             disabled={pending}
             key={`${server.scope}:${server.name}`}
             server={server}
-            onRemove={() => {
-              if (window.confirm(removeServerQuestion(server, t))) {
-                run(() => actions.onRemoveServer(server.name));
-              }
-            }}
+            onRemove={() => setPendingRemoval(server)}
             onToggle={(enabled) =>
               run(() => actions.onSetServerEnabled(server.scope, server.name, enabled))
             }
@@ -147,6 +145,22 @@ export function SettingsMcpSection({ workspaceId, actions }: SettingsMcpSectionP
           />
         </SettingsRow>
       </SettingsGroup>
+
+      {pendingRemoval ? (
+        <ConfirmDialog
+          cancelLabel={t("settings.common.cancel")}
+          confirmLabel={t("settings.common.remove")}
+          description={removeServerQuestion(pendingRemoval, t)}
+          testId="remove-mcp-server-dialog"
+          title={t("settings.mcp.removeServerTitle")}
+          onCancel={() => setPendingRemoval(null)}
+          onConfirm={() => {
+            const server = pendingRemoval;
+            setPendingRemoval(null);
+            run(() => actions.onRemoveServer(server.name));
+          }}
+        />
+      ) : null}
     </>
   );
 }

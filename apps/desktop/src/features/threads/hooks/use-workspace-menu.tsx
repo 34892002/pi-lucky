@@ -31,12 +31,16 @@ export interface WorkspaceMenuState {
   readonly workspaceMenuWrapRef: RefObject<HTMLSpanElement | null>;
   readonly workspaceRenamePanelRef: RefObject<HTMLFormElement | null>;
   readonly workspaceRenameInputRef: RefObject<HTMLInputElement | null>;
+  /** What a pending confirmation would remove, or null when no dialog is open. */
+  readonly removeRequest: WorkspaceRemoveRequest | null;
   readonly openWorkspaceMenu: (workspaceId: string) => void;
   readonly closeWorkspaceMenu: () => void;
   readonly startRename: (workspace: WorkspaceRecord) => void;
   readonly submitRename: (workspace: WorkspaceRecord) => void;
   readonly cancelRename: () => void;
   readonly removeWorkspace: (workspace: WorkspaceRecord) => void;
+  readonly confirmRemove: () => void;
+  readonly cancelRemove: () => void;
   readonly createWorktree: (
     workspaceId: string,
     fromSessionWorkspaceId?: string,
@@ -50,12 +54,17 @@ export interface WorkspaceMenuState {
   ) => void;
 }
 
+export type WorkspaceRemoveRequest =
+  | { readonly kind: "workspace"; readonly workspace: WorkspaceRecord }
+  | { readonly kind: "worktree"; readonly workspaceId: string; readonly worktree: WorktreeRecord };
+
 export function useWorkspaceMenu(params: UseWorkspaceMenuParams): WorkspaceMenuState {
   const { api, setSnapshot, updateSnapshot } = params;
 
   const [workspaceMenuId, setWorkspaceMenuId] = useState<string | null>(null);
   const [workspaceRenameId, setWorkspaceRenameId] = useState<string | null>(null);
   const [workspaceRenameDraft, setWorkspaceRenameDraft] = useState("");
+  const [removeRequest, setRemoveRequest] = useState<WorkspaceRemoveRequest | null>(null);
 
   const workspaceMenuWrapRef = useRef<HTMLSpanElement | null>(null);
   const workspaceRenamePanelRef = useRef<HTMLFormElement | null>(null);
@@ -141,19 +150,9 @@ export function useWorkspaceMenu(params: UseWorkspaceMenuParams): WorkspaceMenuS
   };
 
   const removeWorkspace = (workspace: WorkspaceRecord) => {
-    const confirmed = window.confirm(
-      `Remove ${workspace.name} from pi-gui? This will not delete any files.`,
-    );
     setWorkspaceMenuId(null);
     setWorkspaceRenameId(null);
-    if (!confirmed || !api) {
-      return;
-    }
-    void updateSnapshot(setSnapshot, () => api.removeWorkspace(workspace.id)).catch(
-      (error: unknown) => {
-        console.error("[renderer] removeWorkspace failed", error);
-      },
-    );
+    setRemoveRequest({ kind: "workspace", workspace });
   };
 
   const createWorktree = (
@@ -173,18 +172,33 @@ export function useWorkspaceMenu(params: UseWorkspaceMenuParams): WorkspaceMenuS
   };
 
   const removeWorktree = (workspaceId: string, worktree: WorktreeRecord) => {
-    const confirmed = window.confirm(
-      `Remove worktree ${worktree.name}? This removes the git worktree from disk.`,
-    );
-    if (!confirmed || !api) {
+    setWorkspaceMenuId(null);
+    setWorkspaceRenameId(null);
+    setRemoveRequest({ kind: "worktree", workspaceId, worktree });
+  };
+
+  const confirmRemove = () => {
+    const request = removeRequest;
+    setRemoveRequest(null);
+    if (!request || !api) {
+      return;
+    }
+    if (request.kind === "workspace") {
+      void updateSnapshot(setSnapshot, () => api.removeWorkspace(request.workspace.id)).catch(
+        (error: unknown) => {
+          console.error("[renderer] removeWorkspace failed", error);
+        },
+      );
       return;
     }
     void updateSnapshot(setSnapshot, () =>
-      api.removeWorktree({ workspaceId, worktreeId: worktree.id }),
+      api.removeWorktree({ workspaceId: request.workspaceId, worktreeId: request.worktree.id }),
     ).catch((error: unknown) => {
-      console.error("[renderer] updateSnapshot failed", error);
+      console.error("[renderer] removeWorktree failed", error);
     });
   };
+
+  const cancelRemove = () => setRemoveRequest(null);
 
   const selectWorkspace = (workspaceId: string) => {
     if (!api) {
@@ -212,12 +226,15 @@ export function useWorkspaceMenu(params: UseWorkspaceMenuParams): WorkspaceMenuS
     workspaceMenuWrapRef,
     workspaceRenamePanelRef,
     workspaceRenameInputRef,
+    removeRequest,
     openWorkspaceMenu,
     closeWorkspaceMenu,
     startRename,
     submitRename,
     cancelRename,
     removeWorkspace,
+    confirmRemove,
+    cancelRemove,
     createWorktree,
     removeWorktree,
     selectWorkspace,

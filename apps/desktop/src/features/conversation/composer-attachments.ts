@@ -143,8 +143,11 @@ export function extractImageFilesFromClipboardData(
     .map((item) => item.getAsFile())
     .filter((file): file is File => Boolean(file))
     .filter(isImageFile);
-  const clipboardFiles = Array.from(clipboardData.files ?? []).filter(isImageFile);
-  return dedupeFiles([...itemFiles, ...clipboardFiles]);
+  if (itemFiles.length > 0) {
+    return dedupeFiles(itemFiles);
+  }
+
+  return dedupeFiles(Array.from(clipboardData.files ?? []).filter(isImageFile));
 }
 
 export function extractFilesFromDataTransfer(

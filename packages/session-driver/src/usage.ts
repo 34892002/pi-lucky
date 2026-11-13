@@ -48,7 +48,10 @@ export interface SessionPlanLimits {
 export interface SessionUsageSnapshot {
   readonly context?: SessionContextUsage;
   /** Prompt tokens of the latest reply, for the cache hit rate. */
-  readonly lastTurn?: SessionTokenCounts;
+  readonly lastTurn?: SessionTokenCounts & {
+    /** Full request duration, including time to first token, as measured by pi. */
+    readonly durationMs?: number;
+  };
   readonly cache: SessionPromptCache;
   /** Totals for the whole session, including compaction and cache-warming requests. */
   readonly totals: SessionTokenCounts & { readonly cost: number };

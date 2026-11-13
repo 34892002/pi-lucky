@@ -253,6 +253,31 @@ export function ArchiveIcon() {
   );
 }
 
+export function TrashIcon() {
+  return (
+    <Icon>
+      <path
+        d="M4.6 6.1h10.8m-6.9 0V4.7a.8.8 0 0 1 .8-.8h1.4a.8.8 0 0 1 .8.8v1.4"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.35"
+      />
+      <path
+        d="M5.6 6.1h8.8l-.6 9.1a1.2 1.2 0 0 1-1.2 1.1H7.4a1.2 1.2 0 0 1-1.2-1.1L5.6 6.1Z"
+        stroke="currentColor"
+        strokeLinejoin="round"
+        strokeWidth="1.35"
+      />
+      <path
+        d="M8.5 9.1v4.2M11.5 9.1v4.2"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.35"
+      />
+    </Icon>
+  );
+}
+
 export function RestoreIcon() {
   return (
     <Icon>

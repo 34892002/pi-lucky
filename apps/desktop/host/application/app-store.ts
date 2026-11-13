@@ -197,6 +197,8 @@ export interface DesktopAppStoreOptions {
     workspace: WorkspaceRef,
     options: GenerateThreadTitleOptions,
   ) => Promise<string | null | undefined>;
+  /** Drops review snapshots that belong to a thread the user just deleted. */
+  readonly purgeTurnCheckpoints?: (sessionRef: SessionRef) => Promise<void>;
 }
 
 export class DesktopAppStore {
@@ -294,6 +296,7 @@ export class DesktopAppStore {
   private readonly workspaceOwner: WorkspaceOwner;
   private readonly orchestrationOwner: OrchestrationOwner;
   private readonly scheduledTaskOwner: ScheduledTaskOwner;
+  private readonly purgeTurnCheckpoints: ((sessionRef: SessionRef) => Promise<void>) | undefined;
   /** App-wide: built-in pi-gui extensions the user switched off in Settings. */
   private readonly disabledBuiltinExtensions = new Set<string>();
   /** Flag values last chosen in New thread, by root workspace: the next thread's defaults. */
@@ -326,6 +329,7 @@ export class DesktopAppStore {
     this.initialWorkspacePaths = options.initialWorkspacePaths;
     this.getWindow = options.getWindow ?? (() => null);
     this.shouldKeepSessionDialogs = options.shouldKeepSessionDialogs ?? (() => false);
+    this.purgeTurnCheckpoints = options.purgeTurnCheckpoints;
 
     this.conversationOwner = createConversationOwner({
       driver: this.driver,
@@ -1020,6 +1024,52 @@ export class DesktopAppStore {
     return this.workspaceOwner.unarchiveSession(target);
   }
 
+  /**
+   * Deletes a thread permanently: transcript file, catalog entry, saved attachments,
+   * draft/pin state and any scheduled task still bound to it.
+   */
+  async deleteSession(target: WorkspaceSessionTarget): Promise<DesktopAppState> {
+    const state = await this.workspaceOwner.deleteSession(target);
+    const removed = !state.workspaces.some(
+      (workspace) =>
+        workspace.id === target.workspaceId &&
+        workspace.sessions.some((session) => session.id === target.sessionId),
+    );
+    if (!removed) {
+      return state;
+    }
+
+    // A task targeting a deleted thread can never run again.
+    const boundTaskIds = this.state.scheduledTasks
+      .filter(
+        (task) =>
+          task.target.kind === "existing-thread" &&
+          task.target.workspaceId === target.workspaceId &&
+          task.target.sessionId === target.sessionId,
+      )
+      .map((task) => task.id);
+    for (const id of boundTaskIds) {
+      await this.scheduledTaskOwner.deleteScheduledTask(id);
+    }
+    if (boundTaskIds.length > 0) {
+      this.scheduleScheduledTasks();
+    }
+
+    if (this.purgeTurnCheckpoints) {
+      try {
+        await this.purgeTurnCheckpoints({
+          workspaceId: target.workspaceId,
+          sessionId: target.sessionId,
+        });
+      } catch (error) {
+        // The thread is already gone; leftover snapshots must not fail the delete.
+        console.warn("[app-store] purging turn checkpoints failed", error);
+      }
+    }
+
+    return boundTaskIds.length > 0 ? this.emit() : state;
+  }
+
   async markSessionRead(target: WorkspaceSessionTarget): Promise<DesktopAppState> {
     await this.initialize();
     const sessionRef = toSessionRef(target);
@@ -1657,11 +1707,18 @@ export class DesktopAppStore {
     const entries = await this.driver.runtimeSupervisor.listCustomProviders();
     return entries.map((entry) => ({
       providerId: entry.providerId,
+      ...(entry.api !== undefined ? { api: entry.api } : {}),
       baseUrl: entry.baseUrl,
       ...(entry.apiKey !== undefined ? { apiKey: entry.apiKey } : {}),
       models: entry.models.map((model) => ({
         id: model.id,
+        ...(model.name !== undefined ? { name: model.name } : {}),
         ...(model.contextWindow !== undefined ? { contextWindow: model.contextWindow } : {}),
+        ...(model.maxTokens !== undefined ? { maxTokens: model.maxTokens } : {}),
+        ...(model.reasoning !== undefined ? { reasoning: model.reasoning } : {}),
+        ...(model.supportsImages !== undefined ? { supportsImages: model.supportsImages } : {}),
+        ...(model.maxTokensField !== undefined ? { maxTokensField: model.maxTokensField } : {}),
+        ...(model.thinkingFormat !== undefined ? { thinkingFormat: model.thinkingFormat } : {}),
       })),
     }));
   }
@@ -1675,11 +1732,24 @@ export class DesktopAppStore {
       (ws) =>
         this.driver.runtimeSupervisor.setCustomProvider(ws, {
           providerId: config.providerId,
+          ...(config.api !== undefined ? { api: config.api } : {}),
           baseUrl: config.baseUrl,
           ...(config.apiKey !== undefined ? { apiKey: config.apiKey } : {}),
           models: config.models.map((model) => ({
             id: model.id,
+            ...(model.name !== undefined ? { name: model.name } : {}),
             ...(model.contextWindow !== undefined ? { contextWindow: model.contextWindow } : {}),
+            ...(model.maxTokens !== undefined ? { maxTokens: model.maxTokens } : {}),
+            ...(model.reasoning !== undefined ? { reasoning: model.reasoning } : {}),
+            ...(model.supportsImages !== undefined
+              ? { supportsImages: model.supportsImages }
+              : {}),
+            ...(model.maxTokensField !== undefined
+              ? { maxTokensField: model.maxTokensField }
+              : {}),
+            ...(model.thinkingFormat !== undefined
+              ? { thinkingFormat: model.thinkingFormat }
+              : {}),
           })),
         }),
       { refreshAllWorkspaces: true },
@@ -2010,7 +2080,9 @@ export class DesktopAppStore {
       } else {
         await this.refreshSessionCommandsForWorkspace(workspaceId);
       }
-      const state = await this.refreshState({ clearLastError: true });
+      // Updating settings must not acquire the selected conversation's lease:
+      // another pi instance may own it even though the settings were saved successfully.
+      const state = await this.refreshState({ clearLastError: true, hydrateSelectedSession: false });
       return reloaded
         ? state
         : this.withError(

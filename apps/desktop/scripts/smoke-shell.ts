@@ -238,10 +238,49 @@ const workspace = await addWorkspaceRoundTrip();
 report.text = (await evaluate<string>("document.body.innerText.slice(0, 400)")).trim();
 console.log(JSON.stringify({ workspace, textAfterWorkspace: report.text.slice(0, 200) }, null, 2));
 
+async function pasteOneImage(): Promise<{ attachmentCount: number; error?: string }> {
+  await evaluate<boolean>(`(() => {
+    const button = Array.from(document.querySelectorAll('button')).find(element => element.textContent?.trim() === '新会话' || element.textContent?.trim() === 'New thread');
+    if (!button) return false;
+    button.click();
+    return true;
+  })()`);
+  const readyUntil = Date.now() + 10_000;
+  let surfaceReady = false;
+  while (Date.now() < readyUntil) {
+    surfaceReady = await evaluate<boolean>('Boolean(document.querySelector(".new-thread__composer .composer__surface"))');
+    if (surfaceReady) break;
+    await new Promise(resolve => setTimeout(resolve, 200));
+  }
+  if (!surfaceReady) {
+    return { attachmentCount: 0, error: "composer surface was not rendered after opening new thread" };
+  }
+  const result = await evaluate<{ attachmentCount: number; error?: string }>(`(async () => {
+    const surface = document.querySelector('.new-thread__composer .composer__surface');
+    const canvas = document.createElement('canvas');
+    canvas.width = 2; canvas.height = 2;
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+    const file = new File([blob], 'cdp-paste.png', { type: 'image/png', lastModified: 1 });
+    const transfer = new DataTransfer();
+    transfer.items.add(file);
+    Object.defineProperty(transfer, 'files', {
+      value: [new File([blob], 'cdp-paste-filelist.png', { type: 'image/png', lastModified: 2 })],
+    });
+    const event = new ClipboardEvent('paste', { bubbles: true, cancelable: true });
+    Object.defineProperty(event, 'clipboardData', { value: transfer });
+    surface.dispatchEvent(event);
+    await new Promise(resolve => setTimeout(resolve, 800));
+    return { attachmentCount: document.querySelectorAll('.new-thread__composer .composer__attachments .composer-attachment--image').length };
+  })()`);
+  return result;
+}
+
+const paste = await pasteOneImage();
+console.log(JSON.stringify({ paste }, null, 2));
 console.log(JSON.stringify(report, null, 2));
 
 const ok =
-  report.hasBridge && report.rootChildren > 0 && exceptions.length === 0 && workspace.rendered;
+  report.hasBridge && report.rootChildren > 0 && exceptions.length === 0 && workspace.rendered && paste.attachmentCount === 1;
 socket.close();
 
 if (!ok) {

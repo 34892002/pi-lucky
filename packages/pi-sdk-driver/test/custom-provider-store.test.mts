@@ -44,7 +44,7 @@ await test("missing file or providers supports saving and reopening an endpoint"
       assert.deepEqual(await store.list(), []);
       assert.equal(await store.delete(endpoint.providerId), false);
       await store.set(endpoint);
-      assert.deepEqual(await new CustomProviderStore(path).list(), [endpoint]);
+      assert.deepEqual(await new CustomProviderStore(path).list(), [{ ...endpoint, api: "openai-completions" }]);
       if (initial) {
         const saved = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
         assert.deepEqual(saved.futureSetting, {
@@ -55,6 +55,59 @@ await test("missing file or providers supports saving and reopening an endpoint"
       assert.deepEqual(await store.list(), []);
     });
   }
+});
+
+await test("legacy configs default to OpenAI and retain OpenAI compat", async () => {
+  await withStore(async (store, path) => {
+    const models = [{ id: "vision", supportsImages: true, maxTokensField: "max_tokens" as const, thinkingFormat: "openai" as const }];
+    await writeFile(path, JSON.stringify({ providers: {
+      [endpoint.providerId]: { baseUrl: endpoint.baseUrl, piGuiCustomEndpoint: true, models: [{ id: "vision" }] },
+    } }));
+    const [legacy] = await store.list();
+    assert.equal(legacy?.api ?? "openai-completions", "openai-completions");
+    await store.set({ ...legacy!, models });
+    const saved = JSON.parse(await readFile(path, "utf8")).providers[endpoint.providerId];
+    assert.equal(saved.api, "openai-completions");
+    assert.deepEqual(saved.models[0].input, ["text", "image"]);
+    assert.deepEqual(saved.models[0].compat, { maxTokensField: "max_tokens", thinkingFormat: "openai" });
+    assert.deepEqual((await store.list())[0]?.models, models);
+  });
+});
+
+await test("Anthropic editing round trips multimodal models without OpenAI compat", async () => {
+  await withStore(async (store, path) => {
+    const anthropic = {
+      ...endpoint,
+      api: "anthropic-messages" as const,
+      apiKey: "test-key",
+      models: [{ id: "vision", name: "Vision", supportsImages: true, reasoning: true, contextWindow: 200000, maxTokens: 8192 }],
+    };
+    await store.set({ ...anthropic, models: anthropic.models.map((model) => ({
+      ...model, maxTokensField: "max_tokens", thinkingFormat: "openai",
+    })) });
+    let saved = JSON.parse(await readFile(path, "utf8")).providers[endpoint.providerId];
+    assert.equal(saved.api, "anthropic-messages");
+    assert.equal(saved.models[0].compat, undefined);
+    assert.deepEqual(saved.models[0].input, ["text", "image"]);
+    const [reopened] = await new CustomProviderStore(path).list();
+    assert.deepEqual(reopened, anthropic);
+    await store.set({ ...reopened!, baseUrl: "https://example.com" });
+    saved = JSON.parse(await readFile(path, "utf8")).providers[endpoint.providerId];
+    assert.equal(saved.api, "anthropic-messages");
+    assert.equal(saved.models[0].compat, undefined);
+    assert.deepEqual((await store.list())[0], { ...anthropic, baseUrl: "https://example.com" });
+  });
+});
+
+await test("invalid provider protocols cannot change saved data", async () => {
+  await withStore(async (store, path) => {
+    await store.set(endpoint);
+    const before = await readFile(path, "utf8");
+    for (const api of [null, "", "openai-responses", 1, {}]) {
+      await assert.rejects(() => store.set({ ...endpoint, api } as unknown as Parameters<CustomProviderStore["set"]>[0]), /Provider api/);
+      assert.equal(await readFile(path, "utf8"), before);
+    }
+  });
 });
 
 await test("set and delete preserve unrelated upstream fields and providers", async () => {
@@ -96,6 +149,6 @@ await test("the queue recovers once malformed saved data is repaired externally"
     await assert.rejects(() => store.set(endpoint), /JSON object for providers/);
     await writeFile(path, '{"providers":{}}');
     await store.set(endpoint);
-    assert.deepEqual(await store.list(), [endpoint]);
+    assert.deepEqual(await store.list(), [{ ...endpoint, api: "openai-completions" }]);
   });
 });

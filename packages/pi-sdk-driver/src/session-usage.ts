@@ -3,7 +3,7 @@ import type {
   SessionPlanLimit,
   SessionPlanLimits,
   SessionPromptCache,
-  SessionTokenCounts,
+
   SessionUsageSnapshot,
 } from "@pi-gui/session-driver";
 
@@ -55,14 +55,14 @@ type BranchEntry = ReturnType<AgentSession["sessionManager"]["getBranch"]>[numbe
 type SessionModel = NonNullable<AgentSession["model"]>;
 
 interface AssistantUsage {
-  readonly counts: SessionTokenCounts;
+  readonly counts: NonNullable<SessionUsageSnapshot["lastTurn"]>;
   readonly provider: string;
   readonly model: string;
   /** When the request started, which is when the provider last touched its cache entry. */
   readonly requestedAtMs: number;
 }
 
-function withLastTurn(usage: AssistantUsage | undefined): { lastTurn?: SessionTokenCounts } {
+function withLastTurn(usage: AssistantUsage | undefined): Pick<SessionUsageSnapshot, "lastTurn"> {
   return usage ? { lastTurn: usage.counts } : {};
 }
 
@@ -75,7 +75,12 @@ function latestAssistantUsage(branch: readonly BranchEntry[]): AssistantUsage | 
     const { input, output, cacheRead, cacheWrite } = message.usage;
     if (input + output + cacheRead + cacheWrite === 0) continue;
     return {
-      counts: { input, output, cacheRead, cacheWrite },
+      counts: {
+        input, output, cacheRead, cacheWrite,
+        ...(typeof message.durationMs === "number" && Number.isFinite(message.durationMs) && message.durationMs > 0
+          ? { durationMs: message.durationMs }
+          : {}),
+      },
       provider: message.provider,
       model: message.model,
       requestedAtMs: message.timestamp,

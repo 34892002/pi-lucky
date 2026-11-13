@@ -41,6 +41,11 @@ import {
 } from "../../contracts/scheduled-tasks";
 import { assertComposerAttachmentsAccepted } from "../../contracts/composer-attachments";
 import {
+  isCustomProviderApi,
+  isCustomModelMaxTokensField,
+  isCustomModelThinkingFormat,
+} from "@pi-gui/pi-sdk-driver/custom-provider-types";
+import {
   decodeTaskWorkbenchTemplate,
   type SaveTaskWorkbenchTemplateInput,
 } from "../../contracts/workbench";
@@ -332,27 +337,60 @@ export function expectNotificationPreferences(value: unknown): Partial<Notificat
 
 export function expectCustomProviderConfig(value: unknown): CustomProviderConfig {
   const record = expectRecord(value, "config");
+  if (record.api !== undefined && !isCustomProviderApi(record.api)) {
+    throw new TypeError("config.api must be openai-completions or anthropic-messages");
+  }
   if (!Array.isArray(record.models)) {
     throw new TypeError("config.models must be an array");
   }
   return {
     providerId: expectNonEmptyString(record.providerId, "config.providerId"),
+    ...(record.api === undefined ? {} : { api: record.api }),
     baseUrl: expectNonEmptyString(record.baseUrl, "config.baseUrl"),
     apiKey: expectOptionalString(record.apiKey, "config.apiKey"),
     models: record.models.map((model, index) => {
       const entry = expectRecord(model, `config.models[${index}]`);
-      const contextWindow = entry.contextWindow;
-      if (
-        contextWindow !== undefined &&
-        (typeof contextWindow !== "number" ||
-          !Number.isSafeInteger(contextWindow) ||
-          contextWindow <= 0)
-      ) {
-        throw new TypeError(`config.models[${index}].contextWindow must be a positive integer`);
+      const positiveInteger = (value: unknown, field: string): number | undefined => {
+        if (value === undefined) {
+          return undefined;
+        }
+        if (typeof value !== "number" || !Number.isSafeInteger(value) || value <= 0) {
+          throw new TypeError(`config.models[${index}].${field} must be a positive integer`);
+        }
+        return value;
+      };
+      const optionalBoolean = (value: unknown, field: string): boolean | undefined => {
+        if (value === undefined) {
+          return undefined;
+        }
+        if (typeof value !== "boolean") {
+          throw new TypeError(`config.models[${index}].${field} must be a boolean`);
+        }
+        return value;
+      };
+      const reasoning = optionalBoolean(entry.reasoning, "reasoning");
+      const supportsImages = optionalBoolean(entry.supportsImages, "supportsImages");
+      if (entry.maxTokensField !== undefined && !isCustomModelMaxTokensField(entry.maxTokensField)) {
+        throw new TypeError(`config.models[${index}].maxTokensField is not a known field`);
+      }
+      if (entry.thinkingFormat !== undefined && !isCustomModelThinkingFormat(entry.thinkingFormat)) {
+        throw new TypeError(`config.models[${index}].thinkingFormat is not a known format`);
       }
       return {
         id: expectNonEmptyString(entry.id, `config.models[${index}].id`),
-        contextWindow,
+        ...(entry.name === undefined
+          ? {}
+          : { name: expectNonEmptyString(entry.name, `config.models[${index}].name`) }),
+        ...(entry.contextWindow === undefined
+          ? {}
+          : { contextWindow: positiveInteger(entry.contextWindow, "contextWindow") }),
+        ...(entry.maxTokens === undefined
+          ? {}
+          : { maxTokens: positiveInteger(entry.maxTokens, "maxTokens") }),
+        ...(reasoning === undefined ? {} : { reasoning }),
+        ...(supportsImages === undefined ? {} : { supportsImages }),
+        ...(entry.maxTokensField === undefined ? {} : { maxTokensField: entry.maxTokensField }),
+        ...(entry.thinkingFormat === undefined ? {} : { thinkingFormat: entry.thinkingFormat }),
       };
     }),
   };
@@ -392,7 +430,11 @@ export function expectNewMcpServerInput(value: unknown): NewMcpServerInput {
 
 export function expectCustomProviderProbeInput(value: unknown): CustomProviderProbeInput {
   const record = expectRecord(value, "input");
+  if (record.api !== undefined && !isCustomProviderApi(record.api)) {
+    throw new TypeError("input.api must be openai-completions or anthropic-messages");
+  }
   return {
+    ...(record.api === undefined ? {} : { api: record.api }),
     baseUrl: expectNonEmptyString(record.baseUrl, "input.baseUrl"),
     apiKey: expectOptionalString(record.apiKey, "input.apiKey"),
   };

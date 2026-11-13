@@ -13,6 +13,8 @@ import {
 import {
   desktopIpc,
   type ChangedFilesResult,
+  type CustomProviderConfig,
+  type CustomProviderModelTestResult,
   type CustomProviderProbeInput,
   type CustomProviderProbeResult,
 } from "../../contracts/ipc";
@@ -102,6 +104,7 @@ type ConversationOwner = Pick<
   | "renameSession"
   | "archiveSession"
   | "unarchiveSession"
+  | "deleteSession"
   | "markSessionRead"
   | "setSessionPinned"
   | "createSession"
@@ -193,6 +196,9 @@ export interface DesktopIpcCapabilities {
   readonly probeCustomProviderModels: (
     input: CustomProviderProbeInput,
   ) => Promise<CustomProviderProbeResult>;
+  readonly testCustomProviderModel: (
+    config: CustomProviderConfig,
+  ) => Promise<CustomProviderModelTestResult>;
   readonly notificationPermission: () => NotificationPermissionService | undefined;
   readonly terminal: () => TerminalService;
   readonly optionalTerminal: () => TerminalService | undefined;
@@ -405,6 +411,10 @@ export function registerDesktopIpc({
     const target = expectSessionTarget(rawTarget);
     return run(event, () => owners.conversation.unarchiveSession(target));
   });
+  ipcMain.handle(desktopIpc.deleteSession, (event, rawTarget: unknown) => {
+    const target = expectSessionTarget(rawTarget);
+    return run(event, () => owners.conversation.deleteSession(target));
+  });
   ipcMain.handle(desktopIpc.markSessionRead, (event, rawTarget: unknown) => {
     const target = expectSessionTarget(rawTarget);
     return run(event, () => owners.conversation.markSessionRead(target));
@@ -568,6 +578,14 @@ export function registerDesktopIpc({
   ipcMain.handle(desktopIpc.probeCustomProviderModels, (event, rawInput: unknown) => {
     windows.windowForSender(event.sender);
     return capabilities.probeCustomProviderModels(expectCustomProviderProbeInput(rawInput));
+  });
+  ipcMain.handle(desktopIpc.testCustomProviderModel, (event, rawConfig: unknown) => {
+    windows.windowForSender(event.sender);
+    const config = expectCustomProviderConfig(rawConfig);
+    if (config.models.length !== 1) {
+      return { ok: false, error: "Exactly one model is required for an availability test." };
+    }
+    return capabilities.testCustomProviderModel(config);
   });
   ipcMain.handle(
     desktopIpc.setScopedModelPatterns,

@@ -95,13 +95,18 @@ export class HostTransport {
   }
 
   async invoke(channel: string, args: readonly unknown[] = []): Promise<unknown> {
+    // JSON turns undefined array entries into null; omit absent optional arguments.
+    let argumentCount = args.length;
+    while (argumentCount > 0 && args[argumentCount - 1] === undefined) {
+      argumentCount -= 1;
+    }
     const response = await fetch(`${this.endpoint.origin}/rpc/${encodeURIComponent(channel)}`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
         authorization: `Bearer ${this.endpoint.token}`,
       },
-      body: JSON.stringify({ args }),
+      body: JSON.stringify({ args: args.slice(0, argumentCount) }),
     });
     if (response.status === 401) {
       throw new Error("sidecar rejected the session token");

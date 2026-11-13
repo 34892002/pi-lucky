@@ -39,18 +39,29 @@ interface UseThreadActionsParams {
 type OpenThreadMenu =
   { readonly surface: "sidebar"; readonly sessionId: string } | { readonly surface: "header" };
 
+/** The thread a pending delete confirmation would remove. */
+export interface DeleteThreadRequest {
+  readonly workspaceId: string;
+  readonly sessionId: string;
+  readonly title: string;
+  readonly scheduledTaskBound: boolean;
+}
+
 export interface ThreadMenuState {
   readonly platform: NodeJS.Platform;
   readonly openMenu: OpenThreadMenu | null;
   readonly renameSessionId: string | null;
   readonly renameDraft: string;
   readonly setRenameDraft: Dispatch<SetStateAction<string>>;
+  readonly deleteRequest: DeleteThreadRequest | null;
   readonly menuWrapRef: RefObject<HTMLDivElement | null>;
   readonly renamePanelRef: RefObject<HTMLFormElement | null>;
   readonly openSidebarMenu: (sessionId: string) => void;
   readonly toggleHeaderMenu: () => void;
   readonly submitRename: (subject: ThreadActionSubject) => void;
   readonly cancelRename: () => void;
+  readonly confirmDeleteThread: () => void;
+  readonly cancelDeleteThread: () => void;
   /**
    * The shared action list every thread menu, shortcut and the command palette
    * use. Running an action closes any open thread menu first.
@@ -73,6 +84,7 @@ export function useThreadActions({
   const [openMenu, setOpenMenu] = useState<OpenThreadMenu | null>(null);
   const [renameSessionId, setRenameSessionId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
+  const [deleteRequest, setDeleteRequest] = useState<DeleteThreadRequest | null>(null);
   const menuWrapRef = useRef<HTMLDivElement | null>(null);
   const renamePanelRef = useRef<HTMLFormElement | null>(null);
 
@@ -116,6 +128,10 @@ export function useThreadActions({
   };
   const restore = (target: WorkspaceSessionTarget) =>
     mutate((desktopApi) => desktopApi.unarchiveSession(target));
+  // Deliberately does not flush the composer draft: that would write the draft into
+  // the thread right before its transcript is deleted.
+  const deleteSession = (target: WorkspaceSessionTarget) =>
+    mutate((desktopApi) => desktopApi.deleteSession(target));
   const setPinned = (target: WorkspaceSessionTarget, pinned: boolean) =>
     mutate((desktopApi) => desktopApi.setSessionPinned(target, pinned));
 
@@ -158,7 +174,25 @@ export function useThreadActions({
         console.error("[renderer] navigator.clipboard.writeText failed", error);
       });
     },
+    deleteThread: (subject) => {
+      setDeleteRequest({
+        workspaceId: subject.workspaceId,
+        sessionId: subject.session.id,
+        title: subject.session.title,
+        scheduledTaskBound: Boolean(
+          nonCompletedBindingForSession(scheduledTasks, subject.session.id),
+        ),
+      });
+    },
   };
+
+  const confirmDeleteThread = () => {
+    const request = deleteRequest;
+    setDeleteRequest(null);
+    if (!request) return;
+    deleteSession({ workspaceId: request.workspaceId, sessionId: request.sessionId });
+  };
+  const cancelDeleteThread = () => setDeleteRequest(null);
 
   return {
     platform,
@@ -166,6 +200,7 @@ export function useThreadActions({
     renameSessionId,
     renameDraft,
     setRenameDraft,
+    deleteRequest,
     menuWrapRef,
     renamePanelRef,
     openSidebarMenu: (sessionId) => {
@@ -187,6 +222,8 @@ export function useThreadActions({
       setRenameSessionId(null);
       setRenameDraft("");
     },
+    confirmDeleteThread,
+    cancelDeleteThread,
     actionsFor: (subject) =>
       buildThreadActions(subject, handlers).map((action) => ({
         ...action,

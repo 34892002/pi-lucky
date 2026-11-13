@@ -10,6 +10,7 @@ import {
   PencilIcon,
   PinIcon,
   RestoreIcon,
+  TrashIcon,
 } from "../../ui/icons";
 
 /**
@@ -24,7 +25,8 @@ export type ThreadActionId =
   | "restore-thread"
   | "mark-read"
   | "scheduled-task"
-  | "copy-session-id";
+  | "copy-session-id"
+  | "delete-thread";
 
 export interface ThreadAction {
   readonly id: ThreadActionId;
@@ -52,6 +54,7 @@ export interface ThreadActionHandlers {
   readonly markRead: (subject: ThreadActionSubject) => void;
   readonly openScheduledTask: (subject: ThreadActionSubject) => void;
   readonly copySessionId: (subject: ThreadActionSubject) => void;
+  readonly deleteThread: (subject: ThreadActionSubject) => void;
 }
 
 export function renameThreadShortcut(platform: NodeJS.Platform): string {
@@ -124,6 +127,12 @@ export function buildThreadActions(
       title: handlers.t("threadAction.copySessionId"),
       icon: <CopyIcon />,
       run: () => handlers.copySessionId(subject),
+    },
+    {
+      id: "delete-thread",
+      title: handlers.t("threadAction.delete"),
+      icon: <TrashIcon />,
+      run: () => handlers.deleteThread(subject),
     },
   );
   return actions;

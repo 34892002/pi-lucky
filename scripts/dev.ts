@@ -8,6 +8,7 @@
  */
 import { existsSync } from "node:fs";
 import path from "node:path";
+import { build } from "vite";
 
 const repoRoot = path.resolve(import.meta.dir, "..");
 const neuBin = path.join(repoRoot, "node_modules", ".bin", process.platform === "win32" ? "neu.exe" : "neu");
@@ -45,16 +46,33 @@ console.log("[dev] building workspace packages");
 runToCompletion([process.execPath, path.join(repoRoot, "scripts", "build-packages.ts")], "build:packages");
 
 console.log("[dev] watching the renderer");
-const renderer = run(
-  [process.execPath, "x", "vite", "build", "--watch", "--mode", "development", "--config", rendererConfig],
-  "vite",
-);
+const renderer = await build({
+  configFile: rendererConfig,
+  mode: "development",
+  build: { watch: {} },
+});
+if (Array.isArray(renderer) || !("on" in renderer)) {
+  throw new Error("Expected Vite to return a renderer build watcher");
+}
+
+// END fires after the initial bundle is written. Opening the webview earlier can
+// load an incomplete index or asset set and leave it blank until a manual reload.
+try {
+  await new Promise<void>((resolve, reject) => {
+    renderer.on("event", (event) => {
+      if (event.code === "END") resolve();
+      if (event.code === "ERROR") reject(event.error);
+    });
+  });
+} catch (error) {
+  await renderer.close();
+  throw error;
+}
 
 console.log("[dev] starting the shell (reload the window to pick up changes)");
 const shell = run([neuBin, "run", "--", "--window-enable-inspector"], "neu run");
 
 // Either side exiting ends the session; `neu run` is the one the user closes.
 shell.exited.then(() => {
-  renderer.kill();
-  process.exit(0);
+  void renderer.close().finally(() => process.exit(0));
 });

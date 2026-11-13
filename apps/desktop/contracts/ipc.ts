@@ -14,6 +14,11 @@ import type {
   SessionTreeSnapshot,
 } from "@pi-gui/session-driver/types";
 import type { ClipboardImageRead } from "./composer-attachments";
+import type {
+  CustomProviderApi,
+  CustomModelMaxTokensField,
+  CustomModelThinkingFormat,
+} from "@pi-gui/pi-sdk-driver/custom-provider-types";
 import type { DesktopEditorList } from "./editors";
 import type { SessionRef } from "@pi-gui/session-driver/types";
 import type { SaveTaskWorkbenchTemplateInput, TaskWorkbenchTemplate } from "./workbench";
@@ -57,17 +62,35 @@ export type DesktopNotificationPermissionStatus =
 
 export interface CustomProviderModelConfig {
   readonly id: string;
+  /** Display name; the model id is shown when unset. */
+  readonly name?: string;
   readonly contextWindow?: number;
+  /** Maximum output tokens; pi defaults to 16384 when unset. */
+  readonly maxTokens?: number;
+  /** Whether the model supports thinking. */
+  readonly reasoning?: boolean;
+  /** Whether the model accepts image input. */
+  readonly supportsImages?: boolean;
+  /** Request field carrying the output limit; pi auto-detects when unset. */
+  readonly maxTokensField?: CustomModelMaxTokensField;
+  /** Thinking parameter shape; pi auto-detects when unset. */
+  readonly thinkingFormat?: CustomModelThinkingFormat;
 }
 
 export interface CustomProviderConfig {
   readonly providerId: string;
+  readonly api?: CustomProviderApi;
   readonly baseUrl: string;
   readonly apiKey?: string;
   readonly models: readonly CustomProviderModelConfig[];
 }
 
+export type CustomProviderModelTestResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly error: string };
+
 export interface CustomProviderProbeInput {
+  readonly api?: CustomProviderApi;
   readonly baseUrl: string;
   readonly apiKey?: string;
 }
@@ -147,6 +170,7 @@ export const desktopIpc = {
   renameSession: "pi-gui:rename-session",
   archiveSession: "pi-gui:archive-session",
   unarchiveSession: "pi-gui:unarchive-session",
+  deleteSession: "pi-gui:delete-session",
   markSessionRead: "pi-gui:mark-session-read",
   setSessionPinned: "pi-gui:set-session-pinned",
   createSession: "pi-gui:create-session",
@@ -176,6 +200,7 @@ export const desktopIpc = {
   setCustomProvider: "pi-gui:set-custom-provider",
   deleteCustomProvider: "pi-gui:delete-custom-provider",
   probeCustomProviderModels: "pi-gui:probe-custom-provider-models",
+  testCustomProviderModel: "pi-gui:test-custom-provider-model",
   setEnableSkillCommands: "pi-gui:set-enable-skill-commands",
   setScopedModelPatterns: "pi-gui:set-scoped-model-patterns",
   setSkillEnabled: "pi-gui:set-skill-enabled",
@@ -758,6 +783,7 @@ export interface PiDesktopApi {
   renameSession(target: WorkspaceSessionTarget, title: string): Promise<DesktopAppState>;
   archiveSession(target: WorkspaceSessionTarget): Promise<DesktopAppState>;
   unarchiveSession(target: WorkspaceSessionTarget): Promise<DesktopAppState>;
+  deleteSession(target: WorkspaceSessionTarget): Promise<DesktopAppState>;
   markSessionRead(target: WorkspaceSessionTarget): Promise<DesktopAppState>;
   setSessionPinned(target: WorkspaceSessionTarget, pinned: boolean): Promise<DesktopAppState>;
   createSession(input: CreateSessionInput): Promise<DesktopAppState>;
@@ -803,6 +829,8 @@ export interface PiDesktopApi {
   setCustomProvider(workspaceId: string, config: CustomProviderConfig): Promise<DesktopAppState>;
   deleteCustomProvider(workspaceId: string, providerId: string): Promise<DesktopAppState>;
   probeCustomProviderModels(input: CustomProviderProbeInput): Promise<CustomProviderProbeResult>;
+  /** Tests an unsaved configuration containing exactly one model without persisting it. */
+  testCustomProviderModel(config: CustomProviderConfig): Promise<CustomProviderModelTestResult>;
   setEnableSkillCommands(workspaceId: string, enabled: boolean): Promise<DesktopAppState>;
   setScopedModelPatterns(
     workspaceId: string,

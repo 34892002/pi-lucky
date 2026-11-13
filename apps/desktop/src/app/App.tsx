@@ -21,6 +21,7 @@ import { useTimelineViewport } from "../features/conversation/hooks/use-timeline
 import { buildDisplayTimelineItems } from "../features/conversation/timeline-turns";
 import { useTurnChanges } from "../features/conversation/hooks/use-turn-changes";
 import { restoreTopmostDialogFocus } from "../ui/dialog-focus";
+import { ConfirmDialog } from "../ui/confirm-dialog";
 import { ComposerPanel } from "../features/conversation/composer-panel";
 import { DiffPanel } from "../features/workbench/diff-panel";
 import type { DiffPanelFileRequest } from "../features/workbench/diff-panel-types";
@@ -1433,6 +1434,49 @@ export default function App() {
           onClose={() => setScheduledEditor(null)}
           onSubmit={handleSubmitScheduledTask}
           onOpenChat={handleOpenScheduledChat}
+        />
+      ) : null}
+      {wsMenu.removeRequest ? (
+        <ConfirmDialog
+          danger={wsMenu.removeRequest.kind === "worktree"}
+          cancelLabel={t("threads.cancel")}
+          confirmLabel={t("threads.remove")}
+          description={
+            wsMenu.removeRequest.kind === "workspace"
+              ? t("threads.removeWorkspaceConfirm", {
+                  workspace: wsMenu.removeRequest.workspace.name,
+                })
+              : t("threads.removeWorktreeConfirm", {
+                  worktree: wsMenu.removeRequest.worktree.name,
+                })
+          }
+          testId="remove-workspace-dialog"
+          title={
+            wsMenu.removeRequest.kind === "workspace"
+              ? t("threads.removeWorkspaceTitle")
+              : t("threads.removeWorktreeTitle")
+          }
+          onCancel={wsMenu.cancelRemove}
+          onConfirm={wsMenu.confirmRemove}
+        />
+      ) : null}
+      {threadMenu.deleteRequest ? (
+        <ConfirmDialog
+          danger
+          cancelLabel={t("threadAction.deleteCancel")}
+          confirmLabel={t("threadAction.deleteConfirmAction")}
+          description={t("threadAction.deleteConfirm", {
+            thread: threadMenu.deleteRequest.title,
+          })}
+          detail={
+            threadMenu.deleteRequest.scheduledTaskBound
+              ? t("threadAction.deleteConfirmScheduledTask")
+              : undefined
+          }
+          testId="delete-thread-dialog"
+          title={t("threadAction.delete")}
+          onCancel={threadMenu.cancelDeleteThread}
+          onConfirm={threadMenu.confirmDeleteThread}
         />
       ) : null}
       {threadSwitcher.state?.overlayVisible ? (

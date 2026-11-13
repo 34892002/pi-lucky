@@ -32,6 +32,7 @@ const reply: StreamFunction = (model) => {
     },
     stopReason: "stop",
     timestamp: REQUEST_STARTED_AT,
+    durationMs: 2000,
   };
   stream.push({ type: "start", partial: { ...message, content: [] } });
   stream.push({ type: "done", reason: "stop", message });
@@ -136,7 +137,10 @@ await test("a completed turn reports pi's context, cache and totals", async (t) 
   assert.equal(usage.context.tokens, 10050);
   assert.equal(usage.context.contextWindow, 128000);
   assert.equal(usage.context.compactAtTokens, 128000 - 16000);
-  assert.deepEqual(usage.lastTurn, { input: 200, output: 50, cacheRead: 9000, cacheWrite: 800 });
+  assert.deepEqual(usage.lastTurn, {
+    input: 200, output: 50, cacheRead: 9000, cacheWrite: 800, durationMs: 2000,
+  });
+  assert.equal(usage.lastTurn.output * 1000 / usage.lastTurn.durationMs, 25);
   assert.deepEqual(usage.totals, {
     input: 200,
     output: 50,

@@ -339,6 +339,24 @@ export class TurnCheckpointStore {
     );
   }
 
+  /** Drops every retained interval of a thread the user deleted; refs age out in maintenance. */
+  async removeSession(target: SessionRef): Promise<void> {
+    await this.load();
+    let dropped = 0;
+    for (const [checkpointId, record] of this.records) {
+      if (sameTarget(record.target, target)) {
+        this.records.delete(checkpointId);
+        dropped += 1;
+      }
+    }
+    if (dropped === 0) {
+      return;
+    }
+    await this.persist();
+    this.droppedSinceMaintenance += dropped;
+    this.scheduleMaintenance();
+  }
+
   /**
    * Deletes refs that no retained interval needs and lets Git prune their objects. Refs and
    * objects younger than the grace period survive, so a concurrent capture keeps its tree.

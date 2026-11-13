@@ -35,6 +35,14 @@ window.addEventListener(
 
 applyLastTheme();
 
+// WebView2 falls back to Chromium's own context menu ("Reload / Save as / Print / Inspect")
+// wherever the app does not handle the event, which reads as a browser leaking through a
+// desktop UI. pi-gui never had that menu, so suppress it app-wide; surfaces that want one
+// (thread rows, workspaces) render their own from the `contextmenu` handler.
+document.addEventListener("contextmenu", (event) => {
+  event.preventDefault();
+});
+
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <I18nProvider>

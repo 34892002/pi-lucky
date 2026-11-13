@@ -121,6 +121,16 @@ export function ContextMeter({ usage }: ContextMeterProps) {
               ))}
             </section>
           ) : null}
+          {usage.lastTurn?.durationMs && usage.lastTurn.output > 0 ? (
+            <section className="context-meter__section">
+              <h3 className="context-meter__heading">{t("contextMeter.lastReply")}</h3>
+              <Row
+                label={t("contextMeter.speed")}
+                value={`${((usage.lastTurn.output * 1000) / usage.lastTurn.durationMs).toFixed(1)}/s`}
+              />
+
+            </section>
+          ) : null}
           <section className="context-meter__section">
             <h3 className="context-meter__heading">{t("contextMeter.thisThread")}</h3>
             <Row
