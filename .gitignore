@@ -1,0 +1,23 @@
+node_modules
+
+# Neutralino runtime binaries and client library (fetched by `neu update`)
+bin
+resources/js
+
+# Renderer build output (vite writes into resources/, which is the served root)
+resources/index.html
+resources/assets
+
+# Compiled sidecar + packaged app
+build
+dist
+# Portable profile created next to the sources in dev (`<repo>/data`); never commit it
+data
+apps/desktop/host/**/dist
+.neutralinojs
+tmp
+.tmp
+.logs
+
+# Local dev / runtime logs and exported auth info
+*.log

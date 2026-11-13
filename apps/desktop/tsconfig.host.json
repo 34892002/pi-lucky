@@ -1,0 +1,35 @@
+{
+  "extends": [
+    "../../tsconfig.base.json",
+    "./tsconfig.paths.json"
+  ],
+  "compilerOptions": {
+    "useDefineForClassFields": true,
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "isolatedModules": true,
+    "composite": false,
+    "declaration": false,
+    "sourceMap": false,
+    "noEmit": true,
+    "noUncheckedIndexedAccess": true,
+    "noFallthroughCasesInSwitch": true,
+    "forceConsistentCasingInFileNames": true,
+    "types": [
+      "node",
+      "bun"
+    ]
+  },
+  "include": [
+    "host",
+    "contracts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}
