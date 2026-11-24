@@ -96,8 +96,8 @@ sidecar（`isPackaged()`）。
 
 ### 3.1 窗口内 DevTools（最省事）
 
-`bun run dev` 已经带上 `--window-enable-inspector`（配置里 `enableInspector: true`），
-窗口起来后自带 DevTools 窗口，`console.log` 直接看。
+`bun run dev` 通过 `--window-enable-inspector` 在启动时打开 DevTools，可以直接查看
+`console.log`。正式包使用配置中的 `enableInspector: false`，启动时不会打开 DevTools。
 
 **sidecar 的 stdout/stderr 会被渲染进程转发成 `[sidecar] ...` 打到 DevTools 控制台**，
 后端崩溃/抛错的堆栈就在这里，不用另开终端。

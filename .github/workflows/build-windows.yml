@@ -57,4 +57,10 @@ jobs:
         run: |
           $zip = "pi-lucky-$env:GITHUB_REF_NAME-windows-x64.zip"
           Compress-Archive -LiteralPath @('pi-lucky-win_x64.exe', 'resources.neu', 'binaries') -DestinationPath $zip
-          gh release create $env:GITHUB_REF_NAME $zip --verify-tag --generate-notes --title "pi-lucky $env:GITHUB_REF_NAME"
+          gh release view $env:GITHUB_REF_NAME --json tagName 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $env:GITHUB_REF_NAME $zip --clobber
+          } else {
+            gh release create $env:GITHUB_REF_NAME $zip --verify-tag --generate-notes --title "pi-lucky $env:GITHUB_REF_NAME"
+          }
+          exit $LASTEXITCODE
