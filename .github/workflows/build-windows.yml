@@ -1,11 +1,12 @@
-name: Build Windows
+name: Release Windows
 
 on:
   push:
-  workflow_dispatch:
+    tags:
+      - 'v*'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -13,13 +14,21 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           persist-credentials: false
 
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: '1.3.14'
+
+      - name: Verify release version
+        shell: pwsh
+        run: |
+          $version = (Get-Content -Raw neutralino.config.json | ConvertFrom-Json).version
+          if ($env:GITHUB_REF_NAME -cne "v$version") {
+            throw "Tag $env:GITHUB_REF_NAME does not match application version $version"
+          }
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -40,12 +49,12 @@ jobs:
             }
           }
 
-      - name: Upload Windows package
-        uses: actions/upload-artifact@v4
-        with:
-          name: pi-lucky-windows-x64
-          path: |
-            dist/pi-lucky/pi-lucky-win_x64.exe
-            dist/pi-lucky/resources.neu
-            dist/pi-lucky/binaries/
-          if-no-files-found: error
+      - name: Publish GitHub Release
+        working-directory: dist/pi-lucky
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $zip = "pi-lucky-$env:GITHUB_REF_NAME-windows-x64.zip"
+          Compress-Archive -LiteralPath @('pi-lucky-win_x64.exe', 'resources.neu', 'binaries') -DestinationPath $zip
+          gh release create $env:GITHUB_REF_NAME $zip --verify-tag --generate-notes --title "pi-lucky $env:GITHUB_REF_NAME"
