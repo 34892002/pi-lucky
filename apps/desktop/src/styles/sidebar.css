@@ -1,5 +1,6 @@
 .shell {
   --sidebar-width: 236px;
+  --sidebar-rendered-width: min(var(--sidebar-width), 45vw);
   --titlebar-toggle-left: 86px;
   --titlebar-toggle-size: 30px;
   --titlebar-toggle-main-gap: 16px;
@@ -33,7 +34,7 @@
 .sidebar {
   position: relative;
   /* A remembered width never crowds out the main area on a smaller window. */
-  width: min(var(--sidebar-width), 45vw);
+  width: var(--sidebar-rendered-width);
   display: grid;
   grid-template-rows: auto 1fr auto;
   overflow: hidden;
@@ -52,7 +53,14 @@
 }
 
 .sidebar__top {
-  padding-top: var(--titlebar-inset-top);
+  padding-top: 48px;
+}
+
+.sidebar__logo {
+  display: block;
+  width: min(100%, 156px);
+  height: auto;
+  margin-bottom: 10px;
 }
 
 .sidebar__nav {
@@ -100,7 +108,7 @@
   white-space: nowrap;
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
   gap: 8px;
 }
 
@@ -985,6 +993,10 @@
    A backdrop covers main while it is open; the backdrop, Escape, choosing a thread and the
    always-visible titlebar toggle (z-index 80) all dismiss it. */
 @media (max-width: 760px) {
+  .shell {
+    --sidebar-rendered-width: min(var(--sidebar-width), 84vw);
+  }
+
   .shell:not(.shell--sidebar-collapsed) {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -994,7 +1006,6 @@
     top: 0;
     bottom: 0;
     left: 0;
-    width: min(var(--sidebar-width), 84vw);
     z-index: 40;
     box-shadow: var(--shadow-xl);
   }

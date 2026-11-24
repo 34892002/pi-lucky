@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { version as configuredVersion } from "../../../../../neutralino.config.json";
 import type { RuntimeSnapshot } from "@pi-gui/session-driver/runtime-types";
 import type { ModelSettingsScopeMode } from "../../../contracts/desktop-state";
 import { useTranslation } from "../../i18n";
@@ -84,6 +85,12 @@ export function SettingsGeneralSection({
               }
             }}
           />
+        </SettingsRow>
+      </SettingsGroup>
+
+      <SettingsGroup title={t("settings.general.groupAbout")}>
+        <SettingsRow title={t("settings.general.appVersion")}>
+          <span className="settings-row__value">{configuredVersion}</span>
         </SettingsRow>
       </SettingsGroup>
     </>

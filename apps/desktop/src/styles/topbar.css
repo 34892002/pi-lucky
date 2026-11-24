@@ -143,6 +143,17 @@
   z-index: 80;
 }
 
+.shell:not(.shell--sidebar-collapsed) > .sidebar-toggle {
+  top: 9px;
+  left: calc(var(--sidebar-rendered-width) - var(--titlebar-toggle-size) - 12px);
+}
+
+.shell:not(.shell--sidebar-collapsed) > .sidebar-toggle .sidebar-toggle__tooltip {
+  top: 50%;
+  left: calc(100% + 16px);
+  transform: translateY(-50%);
+}
+
 .sidebar-toggle__button {
   width: var(--titlebar-toggle-size);
   height: var(--titlebar-toggle-size);

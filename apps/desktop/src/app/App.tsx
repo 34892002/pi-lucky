@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { RuntimeSnapshot } from "@pi-gui/session-driver/runtime-types";
 import {
   getSelectedSession,
@@ -52,7 +52,8 @@ import {
   sessionThreadKey,
   type ThreadListEntry,
 } from "../features/threads/thread-groups";
-import { Sidebar } from "../features/threads/sidebar";
+import { Sidebar, SIDEBAR_WIDTH_RANGE } from "../features/threads/sidebar";
+import { usePersistedPaneWidth } from "../ui/use-persisted-pane-width";
 import { ThreadSwitcher } from "../features/threads/thread-switcher";
 import {
   loadThreadSwitcherOrder,
@@ -102,6 +103,7 @@ export default function App() {
   const { t } = useTranslation();
   const desktop = useDesktopAppState();
   const workbenchWidth = useWorkbenchWidth();
+  const [sidebarWidth, setSidebarWidth] = usePersistedPaneWidth("pi-gui.sidebar-width", SIDEBAR_WIDTH_RANGE);
   const snapshot = desktop.snapshot;
   const setSnapshot = desktop.setSnapshot;
   const selectedTranscript = desktop.selectedTranscript;
@@ -980,9 +982,11 @@ export default function App() {
   }
 
   const shellClassName = `shell${snapshot.sidebarCollapsed ? " shell--sidebar-collapsed" : ""}`;
+  const shellStyle: (CSSProperties & { "--sidebar-width": string }) | undefined =
+    sidebarWidth === undefined ? undefined : { "--sidebar-width": `${sidebarWidth}px` };
 
   return (
-    <div className={shellClassName}>
+    <div className={shellClassName} style={shellStyle}>
       {primarySidebarToggleVisible ? (
         <SidebarToggleButton
           collapsed={snapshot.sidebarCollapsed}
@@ -993,6 +997,7 @@ export default function App() {
       ) : null}
       {!snapshot.sidebarCollapsed ? (
         <Sidebar
+          onResize={setSidebarWidth}
           activeView={snapshot.activeView}
           selectedWorkspace={selectedWorkspace}
           selectedSession={selectedSession}

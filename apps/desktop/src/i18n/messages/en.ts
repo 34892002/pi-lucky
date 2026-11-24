@@ -199,6 +199,8 @@ export const en = {
   "settings.general.shell.description":
     "The shell the integrated terminal starts. Leave blank to use your login shell.",
   "settings.general.shell.label": "Shell of integrated terminal",
+  "settings.general.groupAbout": "About",
+  "settings.general.appVersion": "App version",
   "settings.appearance.groupTheme": "Theme",
   "settings.appearance.themeLabel": "Theme",
   "settings.appearance.mode.system": "System",

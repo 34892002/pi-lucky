@@ -29,6 +29,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import heroLogo from "../../../../../assets/hero-logo.svg";
 import type {
   AppView,
   SessionRecord,
@@ -60,7 +61,7 @@ import {
 import { formatRelativeTime } from "../../lib/string-utils";
 import { useTranslation, type MessageKey } from "../../i18n";
 import { PaneResizeHandle, type PaneWidthBounds } from "../../ui/pane-resize-handle";
-import { usePersistedPaneWidth } from "../../ui/use-persisted-pane-width";
+
 import { sessionLastInteractedAt } from "../../../contracts/thread-recency";
 import type { WorkspaceMenuState } from "./hooks/use-workspace-menu";
 import type { ThreadMenuState } from "./hooks/use-thread-actions";
@@ -83,6 +84,7 @@ import type { DesktopAppState } from "../../../contracts/desktop-state";
 import { applySnapshotIfNewer } from "../../app/desktop-app-state";
 
 interface SidebarProps {
+  readonly onResize: (width: number | undefined) => void;
   readonly activeView: AppView;
   readonly selectedWorkspace: WorkspaceRecord | undefined;
   readonly selectedSession: SessionRecord | undefined;
@@ -114,7 +116,7 @@ interface SidebarProps {
   readonly threadShortcutOrderRef: MutableRefObject<readonly ThreadListEntry[] | null>;
 }
 
-const SIDEBAR_WIDTH_RANGE = { min: 200, max: 520 } as const;
+export const SIDEBAR_WIDTH_RANGE = { min: 200, max: 520 } as const;
 
 function sidebarWidthBounds(_sidebar: HTMLElement, shell: HTMLElement): PaneWidthBounds {
   return {
@@ -143,6 +145,7 @@ const ThreadListContext = createContext<
 export function Sidebar(props: SidebarProps) {
   const { t } = useTranslation();
   const {
+    onResize,
     activeView,
     selectedWorkspace,
     selectedSession,
@@ -168,12 +171,7 @@ export function Sidebar(props: SidebarProps) {
     threadShortcutOrderRef,
   } = props;
 
-  const [sidebarWidth, setSidebarWidth] = usePersistedPaneWidth(
-    "pi-gui.sidebar-width",
-    SIDEBAR_WIDTH_RANGE,
-  );
-  const sidebarWidthStyle: (CSSProperties & { "--sidebar-width": string }) | undefined =
-    sidebarWidth === undefined ? undefined : { "--sidebar-width": `${sidebarWidth}px` };
+
   const [activeId, setActiveId] = useState<string | null>(null);
   const [archivedOpen, setArchivedOpen] = useState(false);
   const [expandedHistory, setExpandedHistory] = useState<ReadonlySet<string>>(() => new Set());
@@ -449,17 +447,25 @@ export function Sidebar(props: SidebarProps) {
   }
 
   return (
-    <aside className="sidebar" id="primary-sidebar" style={sidebarWidthStyle}>
+    <aside className="sidebar" id="primary-sidebar">
       <PaneResizeHandle
         className="sidebar__resize-handle"
         label={t("threads.sidebarWidth")}
         controls="primary-sidebar"
         edge="right"
         bounds={sidebarWidthBounds}
-        onResize={setSidebarWidth}
-        onReset={() => setSidebarWidth(undefined)}
+        onResize={onResize}
+        onReset={() => onResize(undefined)}
       />
       <div className="sidebar__top">
+        <img
+          className="sidebar__logo"
+          src={heroLogo}
+          alt="pi-lucky"
+          width={1184}
+          height={368}
+          draggable={false}
+        />
         <button
           className="sidebar__new"
           type="button"

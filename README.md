@@ -31,12 +31,17 @@ pi 是一个跑在终端里的编程助手：读你的代码、改文件、跑�
 解压 `dist/pi-lucky-release.zip` 到**任何可写目录**（整个文件夹就是全部，移动即搬家），
 双击 `pi-lucky-win_x64.exe`。
 
+推送到 GitHub 后，**Actions → Build Windows** 会自动构建 Windows x64 版本。
+在成功的运行记录底部下载 `pi-lucky-windows-x64` 产物，解压整个 ZIP 后双击
+`pi-lucky-win_x64.exe`。也可以从工作流页面手动运行构建。
+
 **从源码构建**
 
 需要 [Bun](https://bun.sh)：
 
 ```
 bun install        # 顺带给 Bun 打 node-pty 补丁
+bun run neu update # 首次检出后下载 Neutralino 运行时
 bun run build      # 产物在 dist/pi-lucky/
 ```
 

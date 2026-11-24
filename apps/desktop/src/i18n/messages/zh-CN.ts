@@ -182,6 +182,8 @@ export const zhCN: Partial<Messages> = {
   "settings.general.shell.title": "Shell",
   "settings.general.shell.description": "内置终端启动所用的 shell。留空则使用登录 shell。",
   "settings.general.shell.label": "内置终端的 shell",
+  "settings.general.groupAbout": "关于",
+  "settings.general.appVersion": "应用版本",
   "settings.appearance.groupTheme": "主题",
   "settings.appearance.themeLabel": "主题",
   "settings.appearance.mode.system": "跟随系统",
