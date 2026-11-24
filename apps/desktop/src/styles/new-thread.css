@@ -19,15 +19,6 @@
 }
 
 .new-thread__logo {
-  width: 44px;
-  height: 44px;
-  display: grid;
-  place-items: center;
-}
-
-.new-thread__logo svg {
-  width: 44px;
-  height: 44px;
   display: block;
 }
 

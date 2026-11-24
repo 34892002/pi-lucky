@@ -1,6 +1,8 @@
 {
   "$schema": "https://raw.githubusercontent.com/neutralinojs/neutralinojs/main/schemas/neutralino.config.schema.json",
   "applicationId": "com.pi.lucky",
+  "applicationName": "pi-lucky",
+  "description": "pi-lucky",
   "version": "0.1.1",
   "defaultMode": "window",
   "port": 0,

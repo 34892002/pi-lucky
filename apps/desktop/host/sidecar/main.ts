@@ -229,7 +229,7 @@ async function main(): Promise<void> {
   notificationPermissionService.trackWindow(window);
   configureNotificationSink({
     isSupported: true,
-    show: ({ title, body }) => bus.broadcast("pi-gui:show-notification", { title, body }),
+    show: (content) => bus.broadcast("pi-gui:show-notification", content),
   });
 
   const notificationManager = new NotificationManager(

@@ -7,6 +7,7 @@ import {
   type RefObject,
 } from "react";
 import type { RuntimeSnapshot } from "@pi-gui/session-driver/runtime-types";
+import appIcon from "../../../../../resources/icons/appIcon.png";
 import { useTranslation } from "../../i18n";
 import type { ExtensionFlagValues } from "@pi-gui/session-driver";
 import type {
@@ -15,7 +16,7 @@ import type {
   WorkspaceRecord,
 } from "../../../contracts/desktop-state";
 import type { MentionOption } from "../conversation/hooks/use-mention-menu";
-import { ArrowUpIcon, PiLogoMark, PlusIcon } from "../../ui/icons";
+import { ArrowUpIcon, PlusIcon } from "../../ui/icons";
 import {
   MODEL_OPTIONS_EMPTY_TITLE_KEY,
   type ComposerSlashCommand,
@@ -159,9 +160,15 @@ export function NewThreadView({
     <section className="canvas canvas--new-thread">
       <div className="new-thread">
         <div className="new-thread__hero">
-          <div className="new-thread__logo" data-testid="new-thread-logo">
-            <PiLogoMark />
-          </div>
+          <img
+            className="new-thread__logo"
+            data-testid="new-thread-logo"
+            src={appIcon}
+            alt=""
+            width={44}
+            height={44}
+            draggable={false}
+          />
           <div className="new-thread__eyebrow">{t("newThread.eyebrow")}</div>
           <h1 className="new-thread__title">{t("newThread.title")}</h1>
           <label className="new-thread__workspace-picker">

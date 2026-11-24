@@ -16,8 +16,14 @@ import type { HostContents, HostWindow } from "./host-window";
 export type BrowserWindow = HostWindow;
 export type WebContents = HostContents;
 
+interface NotificationContent {
+  readonly title: string;
+  readonly body: string;
+  readonly kind?: "runCompleted";
+}
+
 export interface NotificationSink {
-  readonly show: (input: { readonly title: string; readonly body: string }) => void;
+  readonly show: (input: NotificationContent) => void;
   readonly isSupported: boolean;
 }
 
@@ -25,7 +31,7 @@ const notificationSink = {
   isSupported: true,
   // Replaced at boot via configureNotificationSink; the default keeps the ported
   // services running in tests and probe harnesses without a renderer.
-  show: (_input: { readonly title: string; readonly body: string }): void => {},
+  show: (_input: NotificationContent): void => {},
 };
 
 export function configureNotificationSink(sink: NotificationSink): void {
@@ -40,11 +46,7 @@ export class Notification {
   private readonly listeners = new Map<string, NotificationListener[]>();
 
   constructor(
-    private readonly options: {
-      readonly title: string;
-      readonly body: string;
-      readonly silent?: boolean;
-    },
+    private readonly options: NotificationContent & { readonly silent?: boolean },
   ) {}
 
   static isSupported(): boolean {
@@ -59,7 +61,8 @@ export class Notification {
   }
 
   show(): void {
-    notificationSink.show({ title: this.options.title, body: this.options.body });
+    const { title, body, kind } = this.options;
+    notificationSink.show({ title, body, kind });
   }
 
   close(): void {

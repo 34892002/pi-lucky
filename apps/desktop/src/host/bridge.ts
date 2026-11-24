@@ -12,6 +12,9 @@
  * method pi-gui adds later works here without hand-maintaining a second list.
  */
 import { neutralino, type ClipboardImage } from "./neutralino";
+import { shellTranslator } from "./shell-locale";
+import { applicationName } from "../../../../neutralino.config.json";
+import { NEW_THREAD_PLACEHOLDER_TITLE } from "../../host/conversation/thread-title-constants";
 import { desktopIpc } from "../../contracts/ipc";
 import type { PiDesktopApi, PiDesktopCommand } from "../../contracts/ipc";
 import type { ComposerAttachment, DesktopAppState } from "../../contracts/desktop-state";
@@ -244,10 +247,20 @@ export function createPiAppBridge(config: BridgeConfig): PiAppBridge {
 
   // Server-side notifications are raised as native toasts by the shell.
   transport.subscribe("pi-gui:show-notification", (payload) => {
-    const { title, body } = (payload ?? {}) as { title?: string; body?: string };
-    if (title) {
-      void neutralino().os.showNotification(title, body ?? "");
-    }
+    const { title, body, kind } = (payload ?? {}) as {
+      title?: string;
+      body?: string;
+      kind?: string;
+    };
+    if (!title) return;
+    const t = shellTranslator();
+    const subject = title === NEW_THREAD_PLACEHOLDER_TITLE ? t("topbar.newThread") : title;
+    const message = kind === "runCompleted" ? t("shell.notification.runCompleted") : body;
+    const content = [subject === applicationName ? undefined : subject, message]
+      .filter(Boolean)
+      .join(" · ");
+    void neutralino().os.showNotification(applicationName, content)
+      .catch((error: unknown) => console.error("[shell] showNotification failed", error));
   });
 
   return { api: base as unknown as PiDesktopApi, dispatchCommand, emitLocalPush };

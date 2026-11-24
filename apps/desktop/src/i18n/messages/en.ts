@@ -989,6 +989,7 @@ export const en = {
   "shell.attachFiles": "Attach files",
   "shell.openFiles": "Open files",
   "shell.startupFailed": "pi-lucky could not start.",
+  "shell.notification.runCompleted": "Agent finished responding",
   "shell.sidecarStopped": "The pi-lucky background process stopped unexpectedly.",
   "errors.desktopUnavailable": "The desktop connection is unavailable.",
   "errors.taskChanged": "The task changed before its draft could be saved.",

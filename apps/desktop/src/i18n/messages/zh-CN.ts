@@ -942,6 +942,7 @@ export const zhCN: Partial<Messages> = {
   "shell.attachFiles": "添加附件",
   "shell.openFiles": "打开文件",
   "shell.startupFailed": "pi-lucky 无法启动。",
+  "shell.notification.runCompleted": "智能体已完成回复",
   "shell.sidecarStopped": "pi-lucky 后台进程意外退出。",
   "errors.desktopUnavailable": "桌面连接不可用。",
   "errors.taskChanged": "任务已变更，草稿未能保存。",

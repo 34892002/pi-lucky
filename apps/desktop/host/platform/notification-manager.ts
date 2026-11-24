@@ -150,8 +150,9 @@ export class NotificationManager {
       }
       await this.showNotification(
         event.sessionRef,
-        event.snapshot.title,
+        this.sessionFromLatestState(event.sessionRef)?.title || event.snapshot.title,
         "Agent finished responding",
+        "runCompleted",
       );
       return;
     }
@@ -316,6 +317,7 @@ export class NotificationManager {
     sessionRef: SessionRef,
     title: string,
     body: string,
+    kind?: "runCompleted",
   ): Promise<void> {
     this.dismissForSession(sessionRef);
     await this.logNotification(sessionRef, title, body);
@@ -325,6 +327,7 @@ export class NotificationManager {
     const notification = new Notification({
       title,
       body,
+      kind,
       silent: false,
     });
     notification.on("click", () => {
