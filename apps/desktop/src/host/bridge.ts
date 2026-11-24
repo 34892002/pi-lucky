@@ -13,7 +13,7 @@
  */
 import { neutralino, type ClipboardImage } from "./neutralino";
 import { shellTranslator } from "./shell-locale";
-import { applicationName } from "../../../../neutralino.config.json";
+
 import { NEW_THREAD_PLACEHOLDER_TITLE } from "../../host/conversation/thread-title-constants";
 import { desktopIpc } from "../../contracts/ipc";
 import type { PiDesktopApi, PiDesktopCommand } from "../../contracts/ipc";
@@ -255,11 +255,8 @@ export function createPiAppBridge(config: BridgeConfig): PiAppBridge {
     if (!title) return;
     const t = shellTranslator();
     const subject = title === NEW_THREAD_PLACEHOLDER_TITLE ? t("topbar.newThread") : title;
-    const message = kind === "runCompleted" ? t("shell.notification.runCompleted") : body;
-    const content = [subject === applicationName ? undefined : subject, message]
-      .filter(Boolean)
-      .join(" · ");
-    void neutralino().os.showNotification(applicationName, content)
+    const message = kind === "runCompleted" ? t("shell.notification.runCompleted") : body ?? "";
+    void neutralino().os.showNotification(subject, message)
       .catch((error: unknown) => console.error("[shell] showNotification failed", error));
   });
 

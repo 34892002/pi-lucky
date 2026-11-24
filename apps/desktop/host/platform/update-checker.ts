@@ -39,7 +39,7 @@ export function showUpdateNotification(
     return;
   }
   const notification = new Notification({
-    title: "pi-lucky",
+    title: "pi-lucky Release Available",
     body: `Version ${latestVersion} is available (you have ${currentVersion}). Click to view the release.`,
   });
   notification.on("click", () => {
