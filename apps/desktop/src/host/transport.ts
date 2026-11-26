@@ -5,6 +5,8 @@
  * URL), pushes arrive on a single WebSocket. Reconnects are transparent so a
  * sidecar restart (dev reload) does not strand the UI.
  */
+import { TOOL_IMAGE_ROUTE, toolImagePath } from "../../contracts/tool-output-images";
+
 export interface SidecarEndpoint {
   readonly origin: string;
   readonly token: string;
@@ -122,6 +124,18 @@ export class HostTransport {
       throw error;
     }
     return body.value;
+  }
+
+  async loadToolImage(src: string, signal: AbortSignal): Promise<Blob> {
+    const imagePath = toolImagePath(src);
+    if (!imagePath) throw new Error("Invalid tool image reference");
+    const response = await fetch(`${this.origin}${TOOL_IMAGE_ROUTE}${imagePath}`, {
+      headers: { authorization: `Bearer ${this.endpoint.token}` },
+      redirect: "error",
+      signal,
+    });
+    if (!response.ok) throw new Error(`Tool image request failed (${response.status})`);
+    return response.blob();
   }
 
   subscribe(channel: string, listener: PushListener): () => void {

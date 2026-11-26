@@ -1140,6 +1140,12 @@
   overflow: hidden;
 }
 
+.timeline-tool__image-status {
+  display: grid;
+  place-items: center;
+  text-align: center;
+}
+
 .timeline-tool__image img {
   object-fit: contain;
 }

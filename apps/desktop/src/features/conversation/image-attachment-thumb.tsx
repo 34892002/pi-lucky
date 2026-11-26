@@ -7,10 +7,11 @@ interface ImageAttachmentThumbProps {
   readonly src: string;
   readonly name: string;
   readonly className: string;
+  readonly onError?: () => void;
 }
 
 /** Image attachment thumbnail that opens the full image in a focused viewer when clicked. */
-export function ImageAttachmentThumb({ src, name, className }: ImageAttachmentThumbProps) {
+export function ImageAttachmentThumb({ src, name, className, onError }: ImageAttachmentThumbProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
@@ -25,7 +26,7 @@ export function ImageAttachmentThumb({ src, name, className }: ImageAttachmentTh
         type="button"
         onClick={() => setOpen(true)}
       >
-        <img alt={name} src={src} />
+        <img alt={name} src={src} onError={onError} />
       </button>
       {open ? (
         <ImageViewer
@@ -39,6 +40,41 @@ export function ImageAttachmentThumb({ src, name, className }: ImageAttachmentTh
       ) : null}
     </>
   );
+}
+
+export function ToolImageThumb({ src, name, className }: ImageAttachmentThumbProps) {
+  const { t } = useTranslation();
+  const api = window.piApp;
+  const load = api?.loadToolImage;
+  const [objectUrl, setObjectUrl] = useState<string>();
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    if (!load) return;
+    const controller = new AbortController();
+    let url: string | undefined;
+    void load(src, controller.signal).then((blob) => {
+      if (controller.signal.aborted) return;
+      url = URL.createObjectURL(blob);
+      setObjectUrl(url);
+    }).catch(() => {
+      if (!controller.signal.aborted) setFailed(true);
+    });
+    return () => {
+      controller.abort();
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [load, src]);
+
+  const displaySrc = load ? objectUrl : src;
+  if (failed || !displaySrc) {
+    return (
+      <span className={`${className} timeline-tool__image-status`} role="status">
+        {t(failed ? "image.unavailable" : "image.loading")}
+      </span>
+    );
+  }
+  return <ImageAttachmentThumb src={displaySrc} name={name} className={className} onError={() => setFailed(true)} />;
 }
 
 function ImageViewer({

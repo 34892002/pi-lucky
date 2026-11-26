@@ -22,6 +22,7 @@ import {
   Trash2,
   X as CloseIcon,
 } from "lucide-react";
+import { ConfirmDialog } from "../../ui/confirm-dialog";
 import { trapDialogFocus } from "../../ui/dialog-focus";
 import type { CustomProviderConfig, CustomProviderModelConfig } from "../../../contracts/ipc";
 import { SettingsSelect } from "./settings-controls";
@@ -46,6 +47,8 @@ export function SettingsCustomEndpointsSection({
   const [entries, setEntries] = useState<readonly CustomProviderConfig[]>([]);
   const [loadError, setLoadError] = useState<string | undefined>();
   const [dialog, setDialog] = useState<DialogMode>({ kind: "closed" });
+  const [pendingRemoval, setPendingRemoval] = useState<string | null>(null);
+  const removalTrigger = useRef<HTMLButtonElement | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
@@ -132,11 +135,10 @@ export function SettingsCustomEndpointsSection({
                 <button
                   className="button button--secondary"
                   type="button"
-                  onClick={() =>
-                    void handleDelete(entry.providerId).catch((error: unknown) => {
-                      setLoadError(error instanceof Error ? error.message : String(error));
-                    })
-                  }
+                  onClick={(event) => {
+                    removalTrigger.current = event.currentTarget;
+                    setPendingRemoval(entry.providerId);
+                  }}
                 >
                   {t("settings.common.remove")}
                 </button>
@@ -159,6 +161,26 @@ export function SettingsCustomEndpointsSection({
         </div>
       </SettingsGroup>
 
+      {pendingRemoval !== null ? (
+        <ConfirmDialog
+          danger
+          cancelLabel={t("settings.common.cancel")}
+          confirmLabel={t("settings.common.remove")}
+          description={t("settings.customEndpoints.removeQuestion", { name: pendingRemoval })}
+          testId="remove-custom-endpoint-dialog"
+          title={t("settings.customEndpoints.removeTitle")}
+          onCancel={() => {
+            setPendingRemoval(null);
+            removalTrigger.current?.focus();
+          }}
+          onConfirm={() => {
+            setPendingRemoval(null);
+            void handleDelete(pendingRemoval).catch((error: unknown) => {
+              setLoadError(error instanceof Error ? error.message : String(error));
+            });
+          }}
+        />
+      ) : null}
       {dialog.kind !== "closed" ? (
         <CustomEndpointDialog
           mode={dialog}

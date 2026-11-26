@@ -185,6 +185,7 @@ export function createPiAppBridge(config: BridgeConfig): PiAppBridge {
     openExternal: (url: string) => neutralino().os.open(url),
     relaunchApplication: () => neutralino().app.restartProcess(),
     readClipboardImage,
+    loadToolImage: (src: string, signal: AbortSignal) => transport.loadToolImage(src, signal),
     // Neutralino never exposes a dropped file's path, and inventing one would be
     // worse than the documented gap: non-image drops fall back to a byte upload.
     getPathForFile: (_file: File) => "",

@@ -3,8 +3,8 @@
  *
  * This is the replacement for Electron's `out/main` bundle: one binary that carries
  * the Bun runtime, the session driver and every dependency, so the shipped app has no
- * `node_modules` at all. Native modules (node-pty) are the one thing a single file
- * cannot hold, so their prebuilds are copied next to the binary.
+ * `node_modules` at all. Runtime files loaded from disk (node-pty and Photon WASM)
+ * are copied next to the binary.
  */
 import { cpSync, existsSync, mkdirSync, rmSync, statSync } from "node:fs";
 import path from "node:path";
@@ -15,6 +15,11 @@ const entry = path.join(repoRoot, "apps/desktop/host/sidecar/main.ts");
 // sidecar must stay a real file on disk next to the app binary.
 const outDir = path.join(repoRoot, "build", "binaries");
 const outFile = path.join(outDir, "pi-lucky-sidecar.exe");
+const photonWasm = "photon_rs_bg.wasm";
+const photonSource = path.join(repoRoot, "node_modules", "@silvia-odwyer", "photon-node", photonWasm);
+if (!existsSync(photonSource)) {
+  throw new Error(`[build-sidecar] missing ${path.relative(repoRoot, photonSource)}; run bun install`);
+}
 
 const target = process.env.PI_LUCKY_TARGET ?? "bun-windows-x64";
 const production = process.env.PI_LUCKY_DEV !== "1";
@@ -67,6 +72,11 @@ if (result.exitCode !== 0) {
   console.error("[build-sidecar] compile failed");
   process.exit(1);
 }
+
+// Pi's Photon loader falls back to a file beside process.execPath when the
+// bundled JS loader cannot read the WASM from its original package directory.
+cpSync(photonSource, path.join(outDir, photonWasm));
+console.log(`[build-sidecar] Photon WASM -> ${path.relative(repoRoot, path.join(outDir, photonWasm))}`);
 
 /**
  * node-pty ships beside the binary rather than inside it: its loader resolves

@@ -43,10 +43,25 @@ jobs:
         working-directory: dist/pi-lucky
         shell: pwsh
         run: |
-          foreach ($file in @('pi-lucky-win_x64.exe', 'resources.neu', 'binaries/pi-lucky-sidecar.exe')) {
+          foreach ($file in @('pi-lucky-win_x64.exe', 'resources.neu', 'binaries/pi-lucky-sidecar.exe', 'binaries/photon_rs_bg.wasm')) {
             if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
               throw "Missing build output: $file"
             }
+          }
+
+      - name: Verify packaged image resizing
+        shell: pwsh
+        run: |
+          $source = 'node_modules/@silvia-odwyer/photon-node/photon_rs_bg.wasm'
+          # A compiled sidecar may still find the original build-machine path.
+          Move-Item -LiteralPath $source -Destination "$source.disabled"
+          try {
+            & ./dist/pi-lucky/binaries/pi-lucky-sidecar.exe --probe-image-resize
+            if ($LASTEXITCODE -ne 0) {
+              throw "Packaged sidecar image resize probe failed"
+            }
+          } finally {
+            Move-Item -LiteralPath "$source.disabled" -Destination $source
           }
 
       - name: Publish GitHub Release

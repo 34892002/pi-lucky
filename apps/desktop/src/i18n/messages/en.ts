@@ -29,6 +29,8 @@ export const en = {
     "Add OpenAI- or Anthropic-compatible endpoints (Ollama, vLLM, or your own server). Stored in ~/.pi/agent/models.json.",
   "settings.customEndpoints.empty": "No custom endpoints yet.",
   "settings.customEndpoints.addEndpoint": "Add endpoint",
+  "settings.customEndpoints.removeTitle": "Remove custom endpoint",
+  "settings.customEndpoints.removeQuestion": 'Remove "{name}" and its saved model settings?',
   "settings.customEndpoints.registerHint":
     "Register a local or custom OpenAI- or Anthropic-compatible server.",
   "settings.customEndpoints.editTitle": "Edit custom endpoint",
@@ -42,7 +44,7 @@ export const en = {
   "settings.customEndpoints.protocolOpenai": "OpenAI (Chat Completions)",
   "settings.customEndpoints.protocolAnthropic": "Anthropic (Messages)",
   "settings.customEndpoints.anthropicHint":
-    "Use the server's base URL, without /v1/messages. Add model IDs manually below.",
+    "Use the server's base URL, without /v1/messages. If model sync is unavailable, add model IDs manually below.",
   "settings.customEndpoints.baseUrl": "Base URL",
   "settings.customEndpoints.baseUrlSuffixLead": "Include the ",
   "settings.customEndpoints.baseUrlSuffixOllama": " suffix. Ollama: ",
@@ -688,6 +690,8 @@ export const en = {
   "turnChanges.binary": "Binary",
   "image.view": "View {name}",
   "image.close": "Close image",
+  "image.loading": "Loading image…",
+  "image.unavailable": "Image unavailable",
   "annotations.remove": "Remove annotation",
   "annotations.edit": "Edit annotation",
   "queued.annotations_one": "{count} annotation",

@@ -78,7 +78,7 @@ sidecar（`isPackaged()`）。
 | `PI_LUCKY_USER_DATA_DIR` | `PI_APP_USER_DATA_DIR` | profile 目录（store、附件、worktree、checkpoint） |
 | `PI_LUCKY_INITIAL_WORKSPACES` | `PI_APP_INITIAL_WORKSPACES` | 启动时打开的工作区，多个用 `path.delimiter` 分隔 |
 | `PI_LUCKY_NODE_PTY_DIR` | — | 打包时放在 exe 旁的 `node-pty` 目录 |
-| `PI_LUCKY_VERSION` | — | 覆盖 sidecar 上报的版本号（默认 `0.1.0`，与 `neutralino.config.json` 一致） |
+| `PI_LUCKY_VERSION` | — | 覆盖 sidecar 上报的版本号（默认取自 `neutralino.config.json`） |
 | `PI_LUCKY_TEST_MODE` | `PI_APP_TEST_MODE` | 静音系统通知，只写通知日志 |
 | `PI_LUCKY_NOTIFICATION_LOG_PATH` | `PI_APP_NOTIFICATION_LOG_PATH` | 通知 JSONL 输出路径 |
 | `PI_LUCKY_ORCHESTRATION_SUPERVISION_INTERVAL_MS` | `PI_APP_ORCHESTRATION_SUPERVISION_INTERVAL_MS` | 子线程巡检间隔，下限 250ms |
@@ -131,7 +131,7 @@ curl http://127.0.0.1:9222/json/list
 每次启动都会写 `<数据目录>\runtime.json`（默认 `<程序目录>/data`，可用 `PI_LUCKY_USER_DATA_DIR` 改）：
 
 ```json
-{ "pid": 1234, "port": 51234, "version": "0.1.0" }
+{ "pid": 1234, "port": 51234, "version": "0.1.2" }
 ```
 
 注意里面**没有 bearer token**：token 只经 stdout 的 `PI_LUCKY_READY` 行传给壳，不落盘。
@@ -172,6 +172,7 @@ RPC 调用约定：body 是 `{"args":[...]}`（可变参数），响应直接是
 | 拖一次却触发多次 | `MutationObserver` 对每个新节点都挂监听 | 只对 `node.matches(DRAG_SELECTOR)` 的节点挂，`WeakSet` 去重 |
 | 终端起来就退出 / 无输出 | Bun 下 `net.Socket({fd, readable:false, writable:true})` 在 Windows 立即关闭 | `scripts/patch-node-pty.ts` 改成 `fs.writeSync(fd)` + `readable:true`（幂等，仅 win32） |
 | 打包后 `node-pty` 找不到 | 原生模块不能进 `bun build --compile` | `--external node-pty`，把 `node-pty/{lib,package.json,prebuilds/win32-x64}` 复制到 exe 旁边；`resolveNodePty()` 依次试 `require` → `PI_LUCKY_NODE_PTY_DIR` → `dirname(execPath)/node-pty` |
+| 打包版连小图也提示无法缩放 | Pi 在判断尺寸前用 Photon 解码；编译版的 worker 不可用时，进程内兜底仍需要 WASM | `build:sidecar` 将 `photon_rs_bg.wasm` 放在 sidecar exe 旁边；发布时保留 `binaries/` 完整目录，可用 sidecar 的 `--probe-image-resize` 验证 |
 | sidecar 体积 114MB→101MB | 生产构建带了 inline sourcemap | 只在 dev 加 `--sourcemap=inline`；node-pty 复制时过滤 `.pdb`（省 24MB） |
 | 文本粘贴失效 | 异步化后 keydown 无条件 `preventDefault`，把原生粘贴吃掉了 | `handlePastedImages()`：**paste 事件优先**（`clipboardData` 已含图片文件），原生 `readClipboardImage` 只做「WebView2 什么都没给」的兜底 |
 | `events.on(...)` 无法退订 | Neutralino 返回的是 `Promise<{success}>`，不是退订函数 | 自己保存 handler 引用并在卸载时 `events.off` |

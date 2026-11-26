@@ -66,14 +66,14 @@ test("uses the unsaved OpenAI model, key, endpoint and compatibility settings th
 });
 
 test("uses the Anthropic SDK adapter with the supplied endpoint and key", async () => {
-  const input = config();
+  const input = config("/apps/anthropic");
   expect(await testCustomProviderModel({
     ...input,
     baseUrl: input.baseUrl.replace(/\/v1$/, ""),
     api: "anthropic-messages",
   })).toEqual({ ok: true });
   const request = requests.at(-1)!;
-  expect(request.path).toBe("/v1/messages");
+  expect(request.path).toBe("/apps/anthropic/v1/messages");
   expect(request.headers.get("x-api-key")).toBe("secret-test-key");
   expect(request.body.model).toBe("unsaved-model");
   expect(request.body.max_tokens).toBe(16);

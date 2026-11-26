@@ -756,6 +756,8 @@ export interface PiDesktopApi {
   saveTaskWorkbenchTemplate(input: SaveTaskWorkbenchTemplateInput): Promise<void>;
   onStateChanged(listener: PiDesktopStateListener): () => void;
   getSelectedTranscript(): Promise<SelectedTranscriptRecord | null>;
+  /** Neutralino fetches transcript images over its authenticated sidecar connection. */
+  loadToolImage?(src: string, signal: AbortSignal): Promise<Blob>;
   onSelectedTranscriptChanged(listener: PiDesktopSelectedTranscriptListener): () => void;
   resendSelectedTranscript(): void;
   onExtensionUiChanged(listener: PiDesktopExtensionUiListener): () => void;

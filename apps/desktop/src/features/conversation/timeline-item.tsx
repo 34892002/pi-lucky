@@ -24,7 +24,7 @@ import {
 import { parseAnnotatedPrompt } from "./annotations/annotation-prompt";
 import { SentAnnotations } from "./annotations/sent-annotations";
 import { ExtensionCardItem, type RunExtensionAction } from "./extension-card";
-import { ImageAttachmentThumb } from "./image-attachment-thumb";
+import { ImageAttachmentThumb, ToolImageThumb } from "./image-attachment-thumb";
 import { MessageMarkdown } from "./message-markdown";
 import { stringifyToolValue, toolOutputImages } from "./tool-output-images";
 import { TurnChangesCard, type OpenTurnChange } from "./turn-changes-card";
@@ -358,9 +358,9 @@ function TimelineToolCallItem({
         // Shown while collapsed too: an image a tool made is a result in itself.
         <div className="timeline-tool__images" data-testid="timeline-tool-images">
           {images.map((image, index) => (
-            <ImageAttachmentThumb
+            <ToolImageThumb
               className="timeline-tool__image"
-              key={`${item.callId}:${index}`}
+              key={image.src}
               name={`${item.toolName} image ${index + 1}`}
               src={image.src}
             />

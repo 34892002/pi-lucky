@@ -6,12 +6,16 @@ const PROBE_TIMEOUT_MS = 10_000;
 
 export async function probeCustomProviderModels(
   input: CustomProviderProbeInput,
+
 ): Promise<CustomProviderProbeResult> {
   if (!isValidHttpBaseUrl(input.baseUrl)) {
     return { ok: false, error: "Base URL must start with http:// or https://." };
   }
   const target = new URL(input.baseUrl.trim());
-  target.pathname = `${target.pathname.replace(/\/+$/, "")}/models`;
+  const basePath = target.pathname.replace(/\/+$/, "");
+  const anthropic = input.api === "anthropic-messages";
+  const versionedPath = anthropic && !basePath.endsWith("/v1") ? `${basePath}/v1` : basePath;
+  target.pathname = `${versionedPath}/models`;
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -24,7 +28,7 @@ export async function probeCustomProviderModels(
     const request = async (): Promise<CustomProviderProbeResult> => {
       const headers = new Headers({ Accept: "application/json" });
       const apiKey = input.apiKey?.trim();
-      if (input.api === "anthropic-messages") {
+      if (anthropic) {
         headers.set("anthropic-version", "2023-06-01");
         if (apiKey) headers.set("x-api-key", apiKey);
       } else if (apiKey) {

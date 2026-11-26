@@ -9,6 +9,7 @@
  * renderer on the sidecar's stdout: the webview is served from the Neutralino
  * origin, so every request is cross-origin and must be proven.
  */
+import { TOOL_IMAGE_ROUTE, TOOL_IMAGE_SCHEME, toolImagePath } from "../../contracts/tool-output-images";
 import type { PushBus } from "./push-bus";
 import type { RpcRegistry } from "./rpc-registry";
 
@@ -24,7 +25,8 @@ export interface SidecarServerOptions {
   readonly bus: PushBus;
   readonly token: string;
   readonly version: string;
-  /** Extra HTTP routes (extension frames, tool images, workspace assets). */
+  readonly toolImageResponse?: (src: string) => Response;
+  /** Extra HTTP routes (extension frames, workspace assets). */
   readonly routes?: readonly RouteHandler[];
   readonly onError?: (error: unknown) => void;
 }
@@ -110,6 +112,26 @@ export function startSidecarServer(options: SidecarServerOptions): SidecarServer
           }
         }
         return json(await rpc.invoke(channel, args));
+      }
+
+      if (options.toolImageResponse && url.pathname.startsWith(`${TOOL_IMAGE_ROUTE}/`)) {
+        if (request.headers.get("authorization") !== `Bearer ${token}`) {
+          return json({ ok: false, error: { message: "Unauthorized" } }, 401);
+        }
+        if (request.method !== "GET") {
+          return json({ ok: false, error: { message: "Image requests require GET" } }, 405);
+        }
+        const src = `${TOOL_IMAGE_SCHEME}://image${url.pathname.slice(TOOL_IMAGE_ROUTE.length)}`;
+        if (!toolImagePath(src)) {
+          return json({ ok: false, error: { message: "Invalid tool image reference" } }, 400);
+        }
+        const response = options.toolImageResponse(src);
+        response.headers.set("cache-control", "no-store");
+        response.headers.set("x-content-type-options", "nosniff");
+        for (const [key, value] of Object.entries(CORS_HEADERS)) {
+          response.headers.set(key, value);
+        }
+        return response;
       }
 
       for (const route of options.routes ?? []) {

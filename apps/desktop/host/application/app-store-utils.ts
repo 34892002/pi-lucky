@@ -24,6 +24,7 @@ import {
   TOOL_IMAGE_SCHEME,
   isShownToolImageData,
   isToolImageBlock,
+  toolImagePath,
 } from "../../contracts/tool-output-images";
 
 export const LEGACY_TRANSCRIPT_HISTORY_LIMIT = 180;
@@ -93,10 +94,15 @@ export function transcriptImageResponse(
   requestUrl: string,
   transcriptForKey: (key: string) => readonly TranscriptMessage[] | undefined,
 ): Response {
-  const [workspaceId, sessionId, messageId, index] = new URL(requestUrl).pathname
-    .split("/")
-    .slice(1)
-    .map(decodeURIComponent);
+  const path = toolImagePath(requestUrl);
+  if (!path) return new Response("Not found", { status: 404 });
+  let segments: string[];
+  try {
+    segments = path.slice(1).split("/").map(decodeURIComponent);
+  } catch {
+    return new Response("Not found", { status: 404 });
+  }
+  const [workspaceId, sessionId, messageId, index] = segments;
   const message =
     workspaceId && sessionId
       ? transcriptForKey(sessionKey({ workspaceId, sessionId }))?.find(

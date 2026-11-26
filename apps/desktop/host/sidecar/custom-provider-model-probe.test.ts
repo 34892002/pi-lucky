@@ -11,6 +11,9 @@ const server = Bun.serve({
   fetch(request) {
     const url = new URL(request.url);
     requests.push({ url, method: request.method, headers: request.headers });
+    if (url.pathname === "/apps/anthropic/v1/models") {
+      return new Response(null, { status: 404 });
+    }
     if (url.pathname.startsWith("/failure/")) {
       return Response.json({ error: "secret-test-key https://secret.invalid" }, {
         status: 401, statusText: "secret-test-key",
@@ -58,9 +61,28 @@ test("uses Anthropic key and version headers when selected through IPC", async (
     ...input(), api: "anthropic-messages",
   }))).ok).toBe(true);
   const request = requests.at(-1)!;
+  expect(request.url.pathname).toBe("/v1/models");
   expect(request.headers.get("x-api-key")).toBe("secret-test-key");
   expect(request.headers.get("anthropic-version")).toBe("2023-06-01");
   expect(request.headers.get("authorization")).toBeNull();
+});
+
+test("adds /v1 when discovering models from an Anthropic Messages base URL", async () => {
+  const baseUrl = new URL("/gateway", input().baseUrl).href;
+  expect((await probeCustomProviderModels({ ...input(), baseUrl, api: "anthropic-messages" })).ok).toBe(true);
+  expect(requests.at(-1)!.url.pathname).toBe("/gateway/v1/models");
+});
+
+test("reports a missing Anthropic models route without falling back to OpenAI", async () => {
+  const before = requests.length;
+  const baseUrl = new URL("/apps/anthropic/", input().baseUrl).href;
+  expect(await probeCustomProviderModels({ ...input(), baseUrl, api: "anthropic-messages" })).toEqual({
+    ok: false, error: "Model discovery request failed (HTTP 404).",
+  });
+  expect(requests).toHaveLength(before + 1);
+  expect(requests.at(-1)!.url.pathname).toBe("/apps/anthropic/v1/models");
+  expect(requests.at(-1)!.headers.get("x-api-key")).toBe("secret-test-key");
+  expect(requests.at(-1)!.headers.get("authorization")).toBeNull();
 });
 
 test("allows endpoints without keys for both API types", async () => {

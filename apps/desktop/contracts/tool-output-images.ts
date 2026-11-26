@@ -5,8 +5,23 @@
  * make it load a remote or local file.
  */
 
-/** Scheme main serves tool-output images on, so their data isn't sent with the transcript. */
+/** Logical image references carried by the transcript, not network URLs. */
 export const TOOL_IMAGE_SCHEME = "pi-gui-image";
+export const TOOL_IMAGE_ROUTE = "/tool-images";
+
+export function toolImagePath(src: string): string | undefined {
+  const prefix = `${TOOL_IMAGE_SCHEME}://image/`;
+  if (!src.startsWith(prefix)) return undefined;
+  const path = src.slice(prefix.length);
+  const segments = path.split("/");
+  if (segments.length !== 4 || !/^\d+$/.test(segments[3] ?? "")) return undefined;
+  for (const id of segments.slice(0, 3)) {
+    if (!/^(?:[\w.!~*'()-]|%[0-9A-Fa-f]{2})+$/.test(id) || /^(?:\.|%2e){1,2}$/i.test(id)) {
+      return undefined;
+    }
+  }
+  return `/${path}`;
+}
 
 const SHOWN_IMAGE_TYPES: ReadonlySet<string> = new Set([
   "image/png",
@@ -41,7 +56,7 @@ export function isShownToolImageUrl(
   const { src, mimeType } = value as Record<string, unknown>;
   return (
     typeof src === "string" &&
-    src.startsWith(`${TOOL_IMAGE_SCHEME}://`) &&
+    toolImagePath(src) !== undefined &&
     typeof mimeType === "string" &&
     SHOWN_IMAGE_TYPES.has(mimeType)
   );

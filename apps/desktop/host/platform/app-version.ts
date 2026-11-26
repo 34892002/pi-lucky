@@ -6,6 +6,7 @@
  * the packaged build stamps them from `neutralino.config.json` and the updater
  * compares against that.
  */
+import { version as configuredVersion } from "../../../../neutralino.config.json";
 import { appVersion } from "../env";
 
-export const APP_VERSION: string = appVersion();
+export const APP_VERSION: string = appVersion(configuredVersion);

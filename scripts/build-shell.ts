@@ -43,7 +43,7 @@ if (!existsSync(distDir)) {
   process.exit(1);
 }
 
-// Ship the sidecar (and its node-pty directory) beside the app binary.
+// Ship the sidecar with its runtime assets (node-pty and Photon WASM) beside the app binary.
 const target = path.join(distDir, "binaries");
 rmSync(target, { recursive: true, force: true });
 mkdirSync(target, { recursive: true });

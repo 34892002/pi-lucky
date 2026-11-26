@@ -3,7 +3,7 @@
   "applicationId": "com.pi.lucky",
   "applicationName": "pi-lucky",
   "description": "pi-lucky",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "defaultMode": "window",
   "port": 0,
   "documentRoot": "/resources/",

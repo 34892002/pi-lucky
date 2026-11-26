@@ -104,6 +104,12 @@ function assertUsableUserDataDir(userDataDir: string): void {
 }
 
 async function main(): Promise<void> {
+  if (process.argv[2] === "--probe-image-resize") {
+    const { probeImageResize } = await import("./image-resize-probe");
+    await probeImageResize();
+    return;
+  }
+
   const resolved = resolveUserDataDir();
   const userDataDir = resolved.dir;
   await mkdir(userDataDir, { recursive: true });
@@ -386,7 +392,10 @@ async function main(): Promise<void> {
     },
   });
 
-  const server = startSidecarServer({ rpc, bus, token, version: APP_VERSION });
+  const server = startSidecarServer({
+    rpc, bus, token, version: APP_VERSION,
+    toolImageResponse: (src) => store.transcriptImageResponse(src),
+  });
   await writeFile(
     path.join(userDataDir, "runtime.json"),
     JSON.stringify({ pid: process.pid, port: server.port, version: APP_VERSION }, null, 2),
